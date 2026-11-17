@@ -6,15 +6,156 @@
   <title>SALET Decision Tree Viewer</title>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
-    .tabs { display: flex; gap: 8px; margin-bottom: 15px; border-bottom: 2px solid #ccc; padding-bottom: 8px; }
-    .tab-btn { padding: 8px 16px; cursor: pointer; border: 1px solid #ccc; background: #f8f9fa; border-radius: 4px; font-weight: bold; }
-    .tab-btn.active { background: #0366d6; color: white; border-color: #0366d6; }
-    #output { overflow-x: auto; max-width: 100%; }
-    table { border-collapse: collapse; width: 100%; font-size: 14px; }
-    th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; }
-    th { background-color: #f1f3f5; position: sticky; top: 0; }
-    tr:nth-child(even) { background-color: #f9f9f9; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      color: #222;
+      background: #fff;
+    }
+    h2 {
+      margin: 0 0 14px;
+      color: #1F3864;
+    }
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+      border-bottom: 2px solid #ccc;
+      padding-bottom: 10px;
+      position: sticky;
+      top: 0;
+      background: #fff;
+      z-index: 20;
+    }
+    .tab-btn {
+      padding: 8px 16px;
+      cursor: pointer;
+      border: 1px solid #ccc;
+      background: #f8f9fa;
+      border-radius: 4px;
+      font-weight: bold;
+      font-size: 14px;
+      color: #333;
+    }
+    .tab-btn:hover { background: #e9ecef; }
+    .tab-btn.active {
+      background: #1F3864;
+      color: #fff;
+      border-color: #1F3864;
+    }
+    #output {
+      overflow-x: auto;
+      max-width: 100%;
+    }
+    table {
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    td {
+      padding: 6px 10px;
+      vertical-align: middle;
+    }
+
+    /* "How to read" sheet */
+    table.sheet-guide {
+      max-width: 920px;
+      width: 100%;
+    }
+    table.sheet-guide td {
+      border: none;
+      padding: 5px 4px;
+      line-height: 1.45;
+    }
+    table.sheet-guide tr:first-child td {
+      font-size: 17px;
+      font-weight: bold;
+      padding-bottom: 10px;
+    }
+    table.sheet-guide tr.spacer-row td {
+      height: 10px;
+      padding: 0;
+    }
+
+    /* "Index" sheet */
+    table.sheet-index td {
+      border: 1px solid #d9d9d9;
+      white-space: nowrap;
+    }
+    table.sheet-index tr:first-child td {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    table.sheet-index td.tile-cell {
+      width: 38px;
+      min-width: 38px;
+      text-align: center;
+      font-weight: bold;
+      border: 1px solid #fff;
+    }
+    table.sheet-index td.num-cell {
+      text-align: right;
+    }
+    table.sheet-index a.jump-link {
+      color: #0563C1;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    table.sheet-index a.jump-link:hover {
+      color: #1F3864;
+    }
+
+    /* "Standard Tree" & "Hard Mode Tree" sheets */
+    table.sheet-tree {
+      width: auto;
+      min-width: 780px;
+    }
+    table.sheet-tree td.word-col {
+      width: 74px;
+      min-width: 74px;
+      max-width: 74px;
+      text-align: center;
+      border: 1px solid #d9d9d9;
+      padding: 6px 4px;
+      letter-spacing: 0.4px;
+    }
+    table.sheet-tree td.tile-cell {
+      font-weight: bold;
+      font-size: 15px;
+      border: 1px solid #fff;
+    }
+    table.sheet-tree td.gap-col {
+      width: 16px;
+      min-width: 16px;
+      padding: 0;
+      border: none;
+      background: transparent;
+    }
+    table.sheet-tree td.desc-col {
+      min-width: 420px;
+      border: none;
+      padding: 5px 10px;
+      white-space: nowrap;
+    }
+    table.sheet-tree td.banner-cell {
+      padding: 9px 12px;
+      font-size: 14px;
+      font-weight: bold;
+      text-align: left;
+      border: none;
+      letter-spacing: 0.2px;
+    }
+    table.sheet-tree tr.spacer-row td {
+      height: 16px;
+      padding: 0;
+      border: none;
+      background: transparent;
+    }
+    tr.highlight-target td {
+      outline: 2px solid #C9B458;
+    }
   </style>
 </head>
 <body>
@@ -23,33 +164,192 @@
   <div id="output">Loading workbook sheets...</div>
 
   <script>
+    let workbook = null;
+    const htmlCache = {};
+
     fetch('SALET_decision_tree.xlsx')
       .then(res => res.arrayBuffer())
       .then(buffer => {
-        const wb = XLSX.read(buffer, { type: 'array' });
+        workbook = XLSX.read(buffer, { type: 'array', cellStyles: true });
         const container = document.getElementById('tab-container');
         container.innerHTML = '';
 
-        wb.SheetNames.forEach((sheetName, idx) => {
+        workbook.SheetNames.forEach((sheetName, idx) => {
           const btn = document.createElement('button');
           btn.className = 'tab-btn' + (idx === 0 ? ' active' : '');
+          btn.dataset.sheet = sheetName;
           btn.textContent = sheetName;
-          btn.onclick = () => renderSheet(wb, sheetName, btn);
+          btn.onclick = () => switchTab(sheetName);
           container.appendChild(btn);
         });
 
-        renderSheet(wb, wb.SheetNames[0], container.children[0]);
+        switchTab(workbook.SheetNames[0]);
       })
       .catch(err => {
         document.getElementById('output').textContent = 'Error loading Excel file.';
         console.error(err);
       });
 
-    function renderSheet(wb, sheetName, activeBtn) {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      activeBtn.classList.add('active');
-      const ws = wb.Sheets[sheetName];
-      document.getElementById('output').innerHTML = XLSX.utils.sheet_to_html(ws);
+    function normalizeHex(rgb) {
+      if (!rgb || typeof rgb !== 'string') return null;
+      const clean = rgb.replace(/^#/, '');
+      if (clean.length === 8) return '#' + clean.slice(2).toUpperCase();
+      if (clean.length === 6) return '#' + clean.toUpperCase();
+      return null;
+    }
+
+    function getFillHex(cell) {
+      if (!cell || !cell.s) return null;
+      const fg = cell.s.fgColor || (cell.s.fill && cell.s.fill.fgColor);
+      return fg && fg.rgb ? normalizeHex(fg.rgb) : null;
+    }
+
+    function getFontStyle(cell) {
+      if (!cell || !cell.s || !cell.s.font) return {};
+      const f = cell.s.font;
+      return {
+        color: f.color && f.color.rgb ? normalizeHex(f.color.rgb) : null,
+        bold: Boolean(f.bold),
+        italic: Boolean(f.italic),
+        underline: Boolean(f.underline)
+      };
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function buildInlineStyle(fillHex, font) {
+      const styles = [];
+      if (fillHex) styles.push(`background-color:${fillHex}`);
+      if (font.color) styles.push(`color:${font.color}`);
+      if (font.bold) styles.push('font-weight:bold');
+      if (font.italic) styles.push('font-style:italic');
+      if (font.underline) styles.push('text-decoration:underline');
+      return styles.length ? ` style="${styles.join(';')}"` : '';
+    }
+
+    function slugify(name) {
+      return name.replace(/[^a-zA-Z0-9]+/g, '-');
+    }
+
+    function renderSheetHtml(sheetName) {
+      if (htmlCache[sheetName]) return htmlCache[sheetName];
+
+      const ws = workbook.Sheets[sheetName];
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      const isTree = sheetName === 'Standard Tree' || sheetName === 'Hard Mode Tree';
+      const isIndex = sheetName === 'Index';
+      const isGuide = sheetName === 'How to read';
+      const maxCol = isTree ? 6 : range.e.c; // 0..6 (A..G) for tree tabs
+
+      const tableClass = isTree ? 'sheet-tree' : (isIndex ? 'sheet-index' : 'sheet-guide');
+      const parts = [`<table class="${tableClass}"><tbody>`];
+
+      for (let r = range.s.r; r <= range.e.r; r++) {
+        const rowNum = r + 1;
+        const rowId = `${slugify(sheetName)}-R${rowNum}`;
+
+        // Detect completely empty separator rows
+        let rowHasContentOrFill = false;
+        for (let c = range.s.c; c <= maxCol; c++) {
+          const cell = ws[XLSX.utils.encode_cell({ r, c })];
+          if (cell && ((cell.v !== undefined && cell.v !== null && cell.v !== '') || getFillHex(cell))) {
+            rowHasContentOrFill = true;
+            break;
+          }
+        }
+        if (!rowHasContentOrFill) {
+          const span = maxCol - range.s.c + 1;
+          parts.push(`<tr id="${rowId}" class="spacer-row"><td colspan="${span}"></td></tr>`);
+          continue;
+        }
+
+        // Detect full-width navy banner rows on tree tabs (#1F3864 across A:G)
+        const firstCell = ws[XLSX.utils.encode_cell({ r, c: 0 })];
+        const firstFill = getFillHex(firstCell);
+        if (isTree && firstFill === '#1F3864') {
+          const text = firstCell ? escapeHtml(XLSX.utils.format_cell(firstCell)) : '';
+          const style = buildInlineStyle(firstFill, getFontStyle(firstCell));
+          parts.push(`<tr id="${rowId}"><td colspan="7" class="banner-cell"${style}>${text}</td></tr>`);
+          continue;
+        }
+
+        parts.push(`<tr id="${rowId}">`);
+        for (let c = range.s.c; c <= maxCol; c++) {
+          const addr = XLSX.utils.encode_cell({ r, c });
+          const cell = ws[addr];
+          const fillHex = getFillHex(cell);
+          const font = getFontStyle(cell);
+          const rawVal = cell && cell.v !== undefined && cell.v !== null ? XLSX.utils.format_cell(cell) : '';
+          const escapedVal = escapeHtml(rawVal);
+
+          const classes = [];
+          if (isTree) {
+            if (c <= 4) {
+              classes.push('word-col');
+              if (fillHex) classes.push('tile-cell');
+            } else if (c === 5) {
+              classes.push('gap-col');
+            } else if (c === 6) {
+              classes.push('desc-col');
+            }
+          } else if (isIndex) {
+            if (r > 0 && c >= 1 && c <= 5 && fillHex) {
+              classes.push('tile-cell');
+            }
+            if (r > 0 && (c === 0 || c === 6 || c === 7)) {
+              classes.push('num-cell');
+            }
+          }
+
+          let innerHtml = escapedVal;
+          // Handle internal sheet hyperlinks on Index tab (e.g., #'Standard Tree'!A342)
+          if (cell && cell.l && cell.l.Target && cell.l.Target.startsWith('#')) {
+            const match = cell.l.Target.match(/^#'?([^'!]+)'?!([A-Z]+)(\d+)$/);
+            if (match) {
+              const targetSheet = match[1];
+              const targetRow = parseInt(match[3], 10);
+              innerHtml = `<a class="jump-link" href="#${slugify(targetSheet)}-R${targetRow}" onclick="jumpToBlock(event, '${targetSheet.replace(/'/g, "\\'")}', ${targetRow})">${escapedVal}</a>`;
+            }
+          }
+
+          const classAttr = classes.length ? ` class="${classes.join(' ')}"` : '';
+          const styleAttr = (isTree && c === 5) ? '' : buildInlineStyle(fillHex, font);
+          parts.push(`<td${classAttr}${styleAttr}>${innerHtml}</td>`);
+        }
+        parts.push('</tr>');
+      }
+
+      parts.push('</tbody></table>');
+      htmlCache[sheetName] = parts.join('');
+      return htmlCache[sheetName];
+    }
+
+    function switchTab(sheetName) {
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.sheet === sheetName);
+      });
+      const output = document.getElementById('output');
+      output.innerHTML = renderSheetHtml(sheetName);
+      window.scrollTo({ top: 0 });
+    }
+
+    function jumpToBlock(event, targetSheet, targetRow) {
+      event.preventDefault();
+      switchTab(targetSheet);
+      requestAnimationFrame(() => {
+        const rowEl = document.getElementById(`${slugify(targetSheet)}-R${targetRow}`);
+        if (rowEl) {
+          rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          rowEl.classList.add('highlight-target');
+          setTimeout(() => rowEl.classList.remove('highlight-target'), 2000);
+        }
+      });
     }
   </script>
 </body>

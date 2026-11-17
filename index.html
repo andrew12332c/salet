@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SALET Decision Tree Viewer</title>
+  <title>SALET Decision Tree Viewer & Wordle Helper</title>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -38,12 +38,21 @@
       font-weight: bold;
       font-size: 14px;
       color: #333;
+      transition: background 0.15s, color 0.15s;
     }
     .tab-btn:hover { background: #e9ecef; }
     .tab-btn.active {
       background: #1F3864;
       color: #fff;
       border-color: #1F3864;
+    }
+    .tab-btn.solver-tab {
+      border-color: #6AAA64;
+    }
+    .tab-btn.solver-tab.active {
+      background: #6AAA64;
+      border-color: #6AAA64;
+      color: #fff;
     }
     #output {
       overflow-x: auto;
@@ -156,6 +165,335 @@
     tr.highlight-target td {
       outline: 2px solid #C9B458;
     }
+
+    /* ================= WORDLE HELPER TAB ================= */
+    .solver-layout {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 28px;
+      align-items: flex-start;
+      max-width: 1080px;
+    }
+    .board-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #fafafa;
+      border: 1px solid #e0e0e0;
+      border-radius: 10px;
+      padding: 18px 20px;
+      min-width: 360px;
+    }
+    .solver-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .mode-switch {
+      display: inline-flex;
+      border: 1px solid #1F3864;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .mode-btn {
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: bold;
+      border: none;
+      background: #fff;
+      color: #1F3864;
+      cursor: pointer;
+    }
+    .mode-btn.active {
+      background: #1F3864;
+      color: #fff;
+    }
+    .toolbar-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .small-btn {
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: bold;
+      border: 1px solid #ccc;
+      background: #fff;
+      color: #333;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .small-btn:hover:not(:disabled) {
+      background: #eef1f5;
+    }
+    .small-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .wordle-grid {
+      display: grid;
+      grid-template-rows: repeat(6, 1fr);
+      gap: 6px;
+      margin: 6px 0 14px;
+    }
+    .wordle-row {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+    }
+    .w-tile {
+      width: 58px;
+      height: 58px;
+      border: 2px solid #d3d6da;
+      background: #fff;
+      color: #1a1a1b;
+      font-size: 28px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-transform: uppercase;
+      user-select: none;
+      border-radius: 4px;
+      transition: transform 0.1s ease, background-color 0.15s ease, border-color 0.15s ease;
+    }
+    .w-tile.active-row {
+      border-color: #878a8c;
+      cursor: pointer;
+    }
+    .w-tile.locked-row {
+      cursor: pointer;
+    }
+    .w-tile.active-row:hover, .w-tile.locked-row:hover {
+      transform: scale(1.04);
+    }
+    .w-tile.cursor-focus {
+      box-shadow: 0 0 0 2px #1F3864;
+    }
+    .w-tile.state-B {
+      background: #787C7E;
+      border-color: #787C7E;
+      color: #fff;
+    }
+    .w-tile.state-Y {
+      background: #C9B458;
+      border-color: #C9B458;
+      color: #fff;
+    }
+    .w-tile.state-G {
+      background: #6AAA64;
+      border-color: #6AAA64;
+      color: #fff;
+    }
+
+    .color-legend {
+      display: flex;
+      gap: 12px;
+      font-size: 12px;
+      color: #555;
+      margin-bottom: 12px;
+    }
+    .legend-dot {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      vertical-align: -2px;
+      margin-right: 4px;
+    }
+
+    .primary-actions {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+      margin-bottom: 14px;
+    }
+    .confirm-btn {
+      flex: 1;
+      padding: 10px 14px;
+      background: #1F3864;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .confirm-btn:hover:not(:disabled) {
+      background: #16294a;
+    }
+    .confirm-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    /* On-screen keyboard */
+    .osk {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: 100%;
+    }
+    .osk-row {
+      display: flex;
+      justify-content: center;
+      gap: 5px;
+    }
+    .osk-key {
+      height: 40px;
+      min-width: 30px;
+      padding: 0 8px;
+      border: none;
+      border-radius: 4px;
+      background: #d3d6da;
+      color: #1a1a1b;
+      font-weight: bold;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .osk-key:hover { filter: brightness(0.94); }
+    .osk-key.wide { min-width: 54px; font-size: 12px; }
+    .osk-key.key-B { background: #787C7E; color: #fff; }
+    .osk-key.key-Y { background: #C9B458; color: #fff; }
+    .osk-key.key-G { background: #6AAA64; color: #fff; }
+
+    /* Right side recommendation & candidates panel */
+    .info-panel {
+      flex: 1;
+      min-width: 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .status-card {
+      border: 1px solid #d0d7de;
+      border-radius: 10px;
+      padding: 16px 18px;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .status-card h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      color: #1F3864;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .status-msg {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #333;
+    }
+    .status-msg.error {
+      color: #b42318;
+      background: #fef3f2;
+      border: 1px solid #fecdca;
+      padding: 10px 12px;
+      border-radius: 6px;
+    }
+    .status-msg.solved {
+      color: #1b5e20;
+      background: #edf7ed;
+      border: 1px solid #b7dfb9;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-weight: bold;
+    }
+    .rec-box {
+      margin-top: 12px;
+      padding: 12px 14px;
+      background: #f0f5fc;
+      border-left: 4px solid #1F3864;
+      border-radius: 4px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .rec-word {
+      font-size: 20px;
+      font-weight: bold;
+      letter-spacing: 2px;
+      color: #1F3864;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: bold;
+      text-transform: uppercase;
+      vertical-align: middle;
+      margin-left: 6px;
+    }
+    .badge-answer { background: #6AAA64; color: #fff; }
+    .badge-win { background: #1F3864; color: #fff; }
+    .badge-probe { background: #C9B458; color: #fff; }
+
+    .tree-jump-btn {
+      font-size: 12px;
+      font-weight: bold;
+      color: #0563C1;
+      background: #fff;
+      border: 1px solid #0563C1;
+      border-radius: 4px;
+      padding: 5px 9px;
+      cursor: pointer;
+    }
+    .tree-jump-btn:hover {
+      background: #0563C1;
+      color: #fff;
+    }
+
+    .candidates-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .candidates-header h4 {
+      margin: 0;
+      font-size: 14px;
+      color: #1F3864;
+    }
+    .candidates-sub {
+      font-size: 12px;
+      color: #666;
+    }
+    .word-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-height: 290px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .word-chip {
+      font-family: monospace;
+      font-size: 13px;
+      font-weight: bold;
+      padding: 4px 8px;
+      border: 1px solid #d0d7de;
+      border-radius: 4px;
+      background: #f8f9fa;
+      color: #222;
+      cursor: pointer;
+    }
+    .word-chip:hover {
+      background: #1F3864;
+      color: #fff;
+      border-color: #1F3864;
+    }
   </style>
 </head>
 <body>
@@ -164,32 +502,694 @@
   <div id="output">Loading workbook sheets...</div>
 
   <script>
+    const SOLVER_TAB_NAME = 'Wordle Helper';
     let workbook = null;
     const htmlCache = {};
+    const parsedTrees = {};
+    let allAnswers = [];
+
+    // Wordle Helper State
+    const solverState = {
+      mode: 'Standard Tree', // 'Standard Tree' | 'Hard Mode Tree'
+      rows: [],              // [{ letters: ['S','A','L','E','T'], colors: ['B','B','B','B','B'], locked: false, pristine: true }]
+      activeRow: 0,
+      solved: false,
+      statusTitle: 'Step 1: Enter SALET Colors',
+      statusHtml: 'Click the tiles on Row 1 to cycle their colors (<b>Gray → Yellow → Green</b>) to match your Wordle result, or type any 5-letter word, then press <b>Enter</b>.',
+      statusType: 'normal', // 'normal' | 'error' | 'solved'
+      recommendation: null, // { word, tag, tagClass, note, targetSheet, targetRow }
+      candidates: []
+    };
+
+    const RGB_TO_STATE = {
+      '00787C7E': 'B',
+      '00C9B458': 'Y',
+      '006AAA64': 'G'
+    };
 
     fetch('SALET_decision_tree.xlsx')
       .then(res => res.arrayBuffer())
       .then(buffer => {
         workbook = XLSX.read(buffer, { type: 'array', cellStyles: true });
+        parsedTrees['Standard Tree'] = parseDecisionTree('Standard Tree');
+        parsedTrees['Hard Mode Tree'] = parseDecisionTree('Hard Mode Tree');
+
+        // Collect all 2,309 possible answers in commonality order
+        const wordSet = new Set();
+        for (const p1 of Object.keys(parsedTrees['Standard Tree'])) {
+          const blocks = parsedTrees['Standard Tree'][p1].blocks;
+          for (const p2 of Object.keys(blocks)) {
+            for (const w of blocks[p2].answers) {
+              wordSet.add(w);
+            }
+          }
+        }
+        allAnswers = Array.from(wordSet);
+
         const container = document.getElementById('tab-container');
         container.innerHTML = '';
 
-        workbook.SheetNames.forEach((sheetName, idx) => {
+        // Add Wordle Helper tab first, followed by all Excel tabs
+        const allTabs = [SOLVER_TAB_NAME, ...workbook.SheetNames];
+        allTabs.forEach((tabName, idx) => {
           const btn = document.createElement('button');
-          btn.className = 'tab-btn' + (idx === 0 ? ' active' : '');
-          btn.dataset.sheet = sheetName;
-          btn.textContent = sheetName;
-          btn.onclick = () => switchTab(sheetName);
+          btn.className = 'tab-btn' + (tabName === SOLVER_TAB_NAME ? ' solver-tab' : '') + (idx === 0 ? ' active' : '');
+          btn.dataset.sheet = tabName;
+          btn.textContent = tabName === SOLVER_TAB_NAME ? '🟩 Wordle Helper' : tabName;
+          btn.onclick = () => switchTab(tabName);
           container.appendChild(btn);
         });
 
-        switchTab(workbook.SheetNames[0]);
+        resetSolver();
+        switchTab(SOLVER_TAB_NAME);
       })
       .catch(err => {
         document.getElementById('output').textContent = 'Error loading Excel file.';
         console.error(err);
       });
 
+    /* ================= PARSE DECISION TREES FROM XLSX ================= */
+    function getCellRgb(ws, r, c) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      if (!cell || !cell.s) return null;
+      const fg = cell.s.fgColor || (cell.s.fill && cell.s.fill.fgColor);
+      if (!fg || !fg.rgb) return null;
+      const clean = fg.rgb.replace(/^#/, '').toUpperCase();
+      return clean.length === 6 ? '00' + clean : clean;
+    }
+
+    function getCellText(ws, r, c) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      return cell && cell.v !== undefined && cell.v !== null ? String(cell.v).trim() : '';
+    }
+
+    function parseDecisionTree(sheetName) {
+      const ws = workbook.Sheets[sheetName];
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      const patterns = {};
+      let currentPat = null;
+      let r = 0;
+
+      while (r <= range.e.r) {
+        const vals = [0, 1, 2, 3, 4, 5, 6].map(c => getCellText(ws, r, c));
+        const fills = [0, 1, 2, 3, 4, 5, 6].map(c => getCellRgb(ws, r, c));
+
+        if (vals.every(v => !v) && fills.every(f => !f)) {
+          r++;
+          continue;
+        }
+
+        if (fills[0] === '001F3864') {
+          const banner = vals[0];
+          const best2 = banner.split('best 2nd guess: ')[1]?.trim() || '';
+          const stats = banner.split('·')[1]?.trim() || '';
+          currentPat = {
+            banner,
+            bannerRow: r + 1,
+            best2,
+            stats,
+            blocks: {}
+          };
+          r++;
+          continue;
+        }
+
+        const p1 = [0, 1, 2, 3, 4].map(i => RGB_TO_STATE[fills[i]] || 'B').join('');
+        if (!patterns[p1]) patterns[p1] = currentPat;
+
+        const w2 = [0, 1, 2, 3, 4].map(i => getCellText(ws, r + 1, i)).join('');
+        const p2 = [0, 1, 2, 3, 4].map(i => RGB_TO_STATE[getCellRgb(ws, r + 1, i)] || 'B').join('');
+        const desc2 = getCellText(ws, r + 1, 6);
+
+        if (p2 === 'GGGGG') {
+          patterns[p1].blocks[p2] = {
+            startRow: r + 1,
+            guess2: w2,
+            pattern2: p2,
+            desc2,
+            solvedOn2: true,
+            guess3: null,
+            guess3IsAnswer: true,
+            desc3: '',
+            answers: [w2]
+          };
+          r += 2;
+          continue;
+        }
+
+        const w3 = [0, 1, 2, 3, 4].map(i => getCellText(ws, r + 2, i)).join('');
+        const fill3 = getCellRgb(ws, r + 2, 0);
+        const desc3 = getCellText(ws, r + 2, 6);
+
+        if (fill3 === '006AAA64') {
+          patterns[p1].blocks[p2] = {
+            startRow: r + 1,
+            guess2: w2,
+            pattern2: p2,
+            desc2,
+            solvedOn2: false,
+            guess3: w3,
+            guess3IsAnswer: true,
+            desc3,
+            answers: [w3]
+          };
+          r += 3;
+          continue;
+        }
+
+        const answers = [];
+        let rr = r + 3;
+        while (rr <= range.e.r) {
+          const rowWords = [0, 1, 2, 3, 4].map(c => getCellText(ws, rr, c));
+          const rowFill = getCellRgb(ws, rr, 0);
+          if (rowWords.every(v => !v) && !rowFill) break;
+          for (const w of rowWords) {
+            if (w) answers.push(w);
+          }
+          rr++;
+        }
+
+        patterns[p1].blocks[p2] = {
+          startRow: r + 1,
+          guess2: w2,
+          pattern2: p2,
+          desc2,
+          solvedOn2: false,
+          guess3: w3,
+          guess3IsAnswer: false,
+          desc3,
+          answers
+        };
+        r = rr;
+      }
+      return patterns;
+    }
+
+    /* ================= WORDLE MATCHING & SOLVER ENGINE ================= */
+    function computeWordleFeedback(guess, answer) {
+      const res = ['B', 'B', 'B', 'B', 'B'];
+      const counts = {};
+      for (let i = 0; i < 5; i++) {
+        const ch = answer[i];
+        counts[ch] = (counts[ch] || 0) + 1;
+      }
+      for (let i = 0; i < 5; i++) {
+        if (guess[i] === answer[i]) {
+          res[i] = 'G';
+          counts[guess[i]]--;
+        }
+      }
+      for (let i = 0; i < 5; i++) {
+        if (res[i] === 'B' && counts[guess[i]] > 0) {
+          res[i] = 'Y';
+          counts[guess[i]]--;
+        }
+      }
+      return res.join('');
+    }
+
+    function filterCandidates(wordList, lockedRows) {
+      return wordList.filter(ans => {
+        for (const row of lockedRows) {
+          const g = row.letters.join('');
+          const p = row.colors.join('');
+          if (computeWordleFeedback(g, ans) !== p) return false;
+        }
+        return true;
+      });
+    }
+
+    function makeEmptyRow(word = '', colors = ['B', 'B', 'B', 'B', 'B'], pristine = false) {
+      const chars = word.toUpperCase().padEnd(5, ' ').slice(0, 5).split('').map(c => c === ' ' ? '' : c);
+      return {
+        letters: chars,
+        colors: [...colors],
+        locked: false,
+        pristine
+      };
+    }
+
+    function resetSolver() {
+      solverState.rows = [
+        makeEmptyRow('SALET', ['B', 'B', 'B', 'B', 'B'], true),
+        makeEmptyRow(),
+        makeEmptyRow(),
+        makeEmptyRow(),
+        makeEmptyRow(),
+        makeEmptyRow()
+      ];
+      solverState.activeRow = 0;
+      solverState.solved = false;
+      solverState.statusTitle = 'Step 1: Enter SALET Colors';
+      solverState.statusHtml = 'Click the tiles on Row 1 to cycle their colors (<b>Gray → Yellow → Green</b>) to match your Wordle feedback, or type any 5-letter word, then press <b>Enter</b>.';
+      solverState.statusType = 'normal';
+      solverState.recommendation = null;
+      solverState.candidates = [...allAnswers];
+      if (getCurrentTab() === SOLVER_TAB_NAME) renderSolverView();
+    }
+
+    function setSolverMode(mode) {
+      if (solverState.mode === mode) return;
+      solverState.mode = mode;
+      recomputeFromLockedRows();
+      renderSolverView();
+    }
+
+    function cycleTileColor(r, c) {
+      if (r > solverState.activeRow) return;
+      const row = solverState.rows[r];
+      if (!row.letters[c]) return;
+
+      const order = ['B', 'Y', 'G'];
+      const next = order[(order.indexOf(row.colors[c]) + 1) % 3];
+      row.colors[c] = next;
+      row.pristine = false;
+
+      // If user edits an already-locked earlier row, unlock subsequent rows and recompute
+      if (r < solverState.activeRow) {
+        for (let i = r + 1; i < 6; i++) {
+          solverState.rows[i] = makeEmptyRow();
+        }
+        row.locked = false;
+        solverState.activeRow = r;
+        solverState.solved = false;
+        recomputeFromLockedRows();
+      }
+      renderSolverView();
+    }
+
+    function setActiveRowAllGray() {
+      if (solverState.solved) return;
+      const row = solverState.rows[solverState.activeRow];
+      row.colors = ['B', 'B', 'B', 'B', 'B'];
+      row.pristine = false;
+      renderSolverView();
+    }
+
+    function clearActiveRowWord() {
+      if (solverState.solved) return;
+      solverState.rows[solverState.activeRow] = makeEmptyRow();
+      renderSolverView();
+    }
+
+    function undoLastRow() {
+      if (solverState.activeRow === 0 && !solverState.solved) return;
+      const targetIdx = solverState.solved ? solverState.activeRow : solverState.activeRow - 1;
+      for (let i = targetIdx + 1; i < 6; i++) {
+        solverState.rows[i] = makeEmptyRow();
+      }
+      solverState.rows[targetIdx].locked = false;
+      solverState.activeRow = targetIdx;
+      solverState.solved = false;
+      recomputeFromLockedRows();
+      renderSolverView();
+    }
+
+    function useCandidateWord(word) {
+      if (solverState.solved || solverState.activeRow >= 6) return;
+      solverState.rows[solverState.activeRow] = makeEmptyRow(word, ['B', 'B', 'B', 'B', 'B'], false);
+      renderSolverView();
+    }
+
+    function handleTypeLetter(letter) {
+      if (getCurrentTab() !== SOLVER_TAB_NAME || solverState.solved) return;
+      const row = solverState.rows[solverState.activeRow];
+      if (!row) return;
+
+      // If row holds an untouched pre-populated suggestion, replace it cleanly when user starts typing
+      if (row.pristine) {
+        row.letters = ['', '', '', '', ''];
+        row.colors = ['B', 'B', 'B', 'B', 'B'];
+        row.pristine = false;
+      }
+
+      const emptyIdx = row.letters.findIndex(ch => ch === '');
+      if (emptyIdx !== -1) {
+        row.letters[emptyIdx] = letter.toUpperCase();
+        renderSolverView();
+      }
+    }
+
+    function handleBackspace() {
+      if (getCurrentTab() !== SOLVER_TAB_NAME || solverState.solved) return;
+      const row = solverState.rows[solverState.activeRow];
+      if (!row) return;
+      row.pristine = false;
+      for (let i = 4; i >= 0; i--) {
+        if (row.letters[i] !== '') {
+          row.letters[i] = '';
+          row.colors[i] = 'B';
+          renderSolverView();
+          return;
+        }
+      }
+    }
+
+    function confirmActiveRow() {
+      if (solverState.solved) return;
+      const r = solverState.activeRow;
+      const row = solverState.rows[r];
+      if (row.letters.some(ch => ch === '')) {
+        solverState.statusTitle = 'Incomplete Word';
+        solverState.statusHtml = 'Please enter all 5 letters before confirming.';
+        solverState.statusType = 'error';
+        renderSolverView();
+        return;
+      }
+
+      row.locked = true;
+      row.pristine = false;
+
+      if (row.colors.join('') === 'GGGGG') {
+        solverState.solved = true;
+        solverState.statusTitle = `Solved in ${r + 1}!`;
+        solverState.statusHtml = `🎉 <b>${row.letters.join('')}</b> is the answer! Click <b>New Game</b> to start another puzzle.`;
+        solverState.statusType = 'solved';
+        solverState.recommendation = null;
+        solverState.candidates = [row.letters.join('')];
+        renderSolverView();
+        return;
+      }
+
+      if (r >= 5) {
+        solverState.solved = true;
+        const locked = solverState.rows.filter(x => x.locked);
+        const rem = filterCandidates(allAnswers, locked);
+        solverState.candidates = rem;
+        solverState.statusTitle = 'Out of Guesses (6/6)';
+        solverState.statusHtml = rem.length
+          ? `Possible remaining answer${rem.length > 1 ? 's' : ''}: <b>${rem.join(', ')}</b>`
+          : 'No matching answers found in the 2,309-word list.';
+        solverState.statusType = 'error';
+        solverState.recommendation = null;
+        renderSolverView();
+        return;
+      }
+
+      solverState.activeRow = r + 1;
+      recomputeFromLockedRows();
+      renderSolverView();
+    }
+
+    function recomputeFromLockedRows() {
+      const locked = solverState.rows.filter(r => r.locked);
+      const tree = parsedTrees[solverState.mode];
+      const nextIdx = solverState.activeRow;
+
+      if (locked.length === 0) {
+        solverState.statusTitle = 'Step 1: Enter SALET Colors';
+        solverState.statusHtml = 'Click the tiles on Row 1 to cycle their colors (<b>Gray → Yellow → Green</b>) to match your Wordle feedback, or type any 5-letter word, then press <b>Enter</b>.';
+        solverState.statusType = 'normal';
+        solverState.recommendation = null;
+        solverState.candidates = [...allAnswers];
+        return;
+      }
+
+      const g1 = locked[0].letters.join('');
+      const p1 = locked[0].colors.join('');
+
+      // Step 2: Evaluating after Guess 1
+      if (locked.length === 1) {
+        if (g1 === 'SALET' && tree[p1]) {
+          const patData = tree[p1];
+          const filtered = filterCandidates(allAnswers, locked);
+          solverState.candidates = filtered;
+          solverState.rows[nextIdx] = makeEmptyRow(patData.best2, ['B', 'B', 'B', 'B', 'B'], true);
+          solverState.statusTitle = `Step 2: Play ${patData.best2}`;
+          solverState.statusHtml = `SALET feedback matched (${patData.stats}). <b>${patData.best2}</b> has been populated into Row 2 — enter its colors next.`;
+          solverState.statusType = 'normal';
+          solverState.recommendation = {
+            word: patData.best2,
+            tag: 'Best 2nd Guess',
+            tagClass: 'badge-win',
+            note: patData.stats,
+            targetSheet: solverState.mode,
+            targetRow: patData.bannerRow
+          };
+          return;
+        }
+      }
+
+      // Step 3: Evaluating after Guess 1 + Guess 2
+      if (locked.length === 2 && g1 === 'SALET' && tree[p1]) {
+        const g2 = locked[1].letters.join('');
+        const p2 = locked[1].colors.join('');
+        const patData = tree[p1];
+        if (g2 === patData.best2 && patData.blocks[p2]) {
+          const blk = patData.blocks[p2];
+          solverState.candidates = [...blk.answers];
+
+          if (blk.guess3IsAnswer) {
+            // Only 1 answer left! Auto-fill Row 3 in green
+            solverState.rows[nextIdx] = makeEmptyRow(blk.guess3, ['G', 'G', 'G', 'G', 'G'], true);
+            solverState.statusTitle = `Step 3: Answer Found — ${blk.guess3}!`;
+            solverState.statusHtml = `Only <b>1</b> possible word remains. <b>${blk.guess3}</b> has been populated in green on Row 3!`;
+            solverState.statusType = 'solved';
+            solverState.recommendation = {
+              word: blk.guess3,
+              tag: 'Only Answer Left',
+              tagClass: 'badge-answer',
+              note: blk.desc3 || `${blk.guess3} is the answer`,
+              targetSheet: solverState.mode,
+              targetRow: blk.startRow
+            };
+          } else {
+            const isProbe = (blk.desc3 || '').toLowerCase().includes('probe');
+            solverState.rows[nextIdx] = makeEmptyRow(blk.guess3, ['B', 'B', 'B', 'B', 'B'], true);
+            solverState.statusTitle = `Step 3: Play ${blk.guess3}`;
+            solverState.statusHtml = `${blk.desc3 || `Best 3rd guess: ${blk.guess3}`}. Populated into Row 3 — enter its colors if not solved.`;
+            solverState.statusType = 'normal';
+            solverState.recommendation = {
+              word: blk.guess3,
+              tag: isProbe ? 'Probe' : 'Can Win Now',
+              tagClass: isProbe ? 'badge-probe' : 'badge-win',
+              note: `${blk.answers.length} possible answers left`,
+              targetSheet: solverState.mode,
+              targetRow: blk.startRow
+            };
+          }
+          return;
+        }
+      }
+
+      // General fallback / Step 4+ filtering across all 2,309 answers
+      // Preserve tree's commonality ordering if we came from a valid SALET+Guess2 block
+      let basePool = allAnswers;
+      if (g1 === 'SALET' && tree[p1]) {
+        if (locked.length >= 2) {
+          const g2 = locked[1].letters.join('');
+          const p2 = locked[1].colors.join('');
+          if (g2 === tree[p1].best2 && tree[p1].blocks[p2]) {
+            basePool = tree[p1].blocks[p2].answers;
+          }
+        }
+      }
+
+      const remaining = filterCandidates(basePool, locked);
+      solverState.candidates = remaining;
+
+      if (remaining.length === 0) {
+        solverState.rows[nextIdx] = makeEmptyRow();
+        solverState.statusTitle = 'No Matching Answers';
+        solverState.statusHtml = 'No words in the 2,309-word Wordle list match those colors. Click any tile above to fix a color.';
+        solverState.statusType = 'error';
+        solverState.recommendation = null;
+      } else if (remaining.length === 1) {
+        const winWord = remaining[0];
+        solverState.rows[nextIdx] = makeEmptyRow(winWord, ['G', 'G', 'G', 'G', 'G'], true);
+        solverState.statusTitle = `Answer Found — ${winWord}!`;
+        solverState.statusHtml = `Only <b>1</b> possible word matches all your clues: <b>${winWord}</b> (populated on Row ${nextIdx + 1}).`;
+        solverState.statusType = 'solved';
+        solverState.recommendation = {
+          word: winWord,
+          tag: 'Only Answer Left',
+          tagClass: 'badge-answer',
+          note: '100% narrowed down',
+          targetSheet: null,
+          targetRow: null
+        };
+      } else {
+        const topPick = remaining[0];
+        solverState.rows[nextIdx] = makeEmptyRow(topPick, ['B', 'B', 'B', 'B', 'B'], true);
+        solverState.statusTitle = `Step ${nextIdx + 1}: ${remaining.length} Words Left`;
+        solverState.statusHtml = `Populated most common remaining word <b>${topPick}</b> into Row ${nextIdx + 1} (or click any candidate below to use it instead).`;
+        solverState.statusType = 'normal';
+        solverState.recommendation = {
+          word: topPick,
+          tag: 'Top Remaining',
+          tagClass: 'badge-win',
+          note: `${remaining.length} candidates left`,
+          targetSheet: null,
+          targetRow: null
+        };
+      }
+    }
+
+    function getLetterKeyStates() {
+      const priority = { B: 1, Y: 2, G: 3 };
+      const map = {};
+      for (const row of solverState.rows) {
+        if (!row.locked) continue;
+        for (let i = 0; i < 5; i++) {
+          const ch = row.letters[i];
+          const st = row.colors[i];
+          if (ch && (!map[ch] || priority[st] > priority[map[ch]])) {
+            map[ch] = st;
+          }
+        }
+      }
+      return map;
+    }
+
+    function renderSolverView() {
+      const output = document.getElementById('output');
+      const keyStates = getLetterKeyStates();
+      const activeRowObj = solverState.rows[solverState.activeRow];
+      const cursorCol = (!solverState.solved && activeRowObj)
+        ? activeRowObj.letters.findIndex(ch => ch === '')
+        : -1;
+
+      let gridHtml = '<div class="wordle-grid">';
+      solverState.rows.forEach((row, rIdx) => {
+        gridHtml += '<div class="wordle-row">';
+        for (let cIdx = 0; cIdx < 5; cIdx++) {
+          const ch = row.letters[cIdx];
+          const st = row.colors[cIdx];
+          const isActive = !solverState.solved && rIdx === solverState.activeRow;
+          const isLocked = row.locked;
+          const classes = ['w-tile'];
+          if (isActive) classes.push('active-row');
+          if (isLocked) classes.push('locked-row');
+          if (isActive && cIdx === cursorCol && !row.pristine) classes.push('cursor-focus');
+          if (ch) classes.push(`state-${st}`);
+
+          const clickAttr = (isActive || isLocked) ? ` onclick="cycleTileColor(${rIdx}, ${cIdx})"` : '';
+          const titleAttr = (isActive || isLocked) && ch ? ' title="Click to cycle Gray → Yellow → Green"' : '';
+          gridHtml += `<div class="${classes.join(' ')}"${clickAttr}${titleAttr}>${escapeHtml(ch)}</div>`;
+        }
+        gridHtml += '</div>';
+      });
+      gridHtml += '</div>';
+
+      const oskRows = [
+        ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+        ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+        ['ENTER', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', '⌫']
+      ];
+      let oskHtml = '<div class="osk">';
+      for (const keys of oskRows) {
+        oskHtml += '<div class="osk-row">';
+        for (const k of keys) {
+          if (k === 'ENTER') {
+            oskHtml += `<button class="osk-key wide" onclick="confirmActiveRow()">ENTER</button>`;
+          } else if (k === '⌫') {
+            oskHtml += `<button class="osk-key wide" onclick="handleBackspace()">⌫</button>`;
+          } else {
+            const st = keyStates[k] ? ` key-${keyStates[k]}` : '';
+            oskHtml += `<button class="osk-key${st}" onclick="handleTypeLetter('${k}')">${k}</button>`;
+          }
+        }
+        oskHtml += '</div>';
+      }
+      oskHtml += '</div>';
+
+      let recHtml = '';
+      if (solverState.recommendation) {
+        const rec = solverState.recommendation;
+        const jumpBtn = rec.targetSheet
+          ? `<button class="tree-jump-btn" onclick="jumpToBlock(event, '${rec.targetSheet}', ${rec.targetRow})">View block in Tree ↗</button>`
+          : '';
+        recHtml = `
+          <div class="rec-box">
+            <div>
+              <span class="rec-word">${escapeHtml(rec.word)}</span>
+              <span class="badge ${rec.tagClass}">${escapeHtml(rec.tag)}</span>
+              <div style="font-size:12px;color:#555;margin-top:3px;">${escapeHtml(rec.note)}</div>
+            </div>
+            ${jumpBtn}
+          </div>
+        `;
+      }
+
+      const maxChips = 150;
+      const shownWords = solverState.candidates.slice(0, maxChips);
+      const chipsHtml = shownWords.map(w =>
+        `<button class="word-chip" onclick="useCandidateWord('${w}')" title="Load ${w} into active row">${w}</button>`
+      ).join('');
+      const extraCount = solverState.candidates.length - shownWords.length;
+
+      output.innerHTML = `
+        <div class="solver-layout">
+          <div class="board-panel">
+            <div class="solver-toolbar">
+              <div class="mode-switch">
+                <button class="mode-btn ${solverState.mode === 'Standard Tree' ? 'active' : ''}" onclick="setSolverMode('Standard Tree')">Standard</button>
+                <button class="mode-btn ${solverState.mode === 'Hard Mode Tree' ? 'active' : ''}" onclick="setSolverMode('Hard Mode Tree')">Hard Mode</button>
+              </div>
+              <div class="toolbar-actions">
+                <button class="small-btn" onclick="undoLastRow()" ${solverState.activeRow === 0 && !solverState.solved ? 'disabled' : ''}>Undo</button>
+                <button class="small-btn" onclick="resetSolver()">New Game</button>
+              </div>
+            </div>
+
+            ${gridHtml}
+
+            <div class="color-legend">
+              <span><i class="legend-dot" style="background:#787C7E"></i>Gray (Absent)</span>
+              <span><i class="legend-dot" style="background:#C9B458"></i>Yellow (Wrong spot)</span>
+              <span><i class="legend-dot" style="background:#6AAA64"></i>Green (Exact)</span>
+            </div>
+
+            <div class="primary-actions">
+              <button class="confirm-btn" onclick="confirmActiveRow()" ${solverState.solved ? 'disabled' : ''}>
+                Confirm Colors &amp; Next Guess ↵
+              </button>
+              <button class="small-btn" onclick="setActiveRowAllGray()" ${solverState.solved ? 'disabled' : ''}>All Gray</button>
+              <button class="small-btn" onclick="clearActiveRowWord()" ${solverState.solved ? 'disabled' : ''}>Clear</button>
+            </div>
+
+            ${oskHtml}
+          </div>
+
+          <div class="info-panel">
+            <div class="status-card">
+              <h3>${escapeHtml(solverState.statusTitle)}</h3>
+              <p class="status-msg ${solverState.statusType}">${solverState.statusHtml}</p>
+              ${recHtml}
+            </div>
+
+            <div class="status-card">
+              <div class="candidates-header">
+                <h4>Possible Answers Left (${solverState.candidates.length})</h4>
+                <span class="candidates-sub">Sorted most common first · click to use</span>
+              </div>
+              <div class="word-chips">
+                ${chipsHtml || '<span style="color:#888;font-size:13px;">None</span>'}
+                ${extraCount > 0 ? `<span style="font-size:12px;color:#666;align-self:center;padding-left:4px;">+${extraCount} more…</span>` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (getCurrentTab() !== SOLVER_TAB_NAME) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        confirmActiveRow();
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        e.preventDefault();
+        handleBackspace();
+      } else if (/^[a-zA-Z]$/.test(e.key)) {
+        e.preventDefault();
+        handleTypeLetter(e.key.toUpperCase());
+      }
+    });
+
+    /* ================= EXCEL SHEET RENDERERS ================= */
     function normalizeHex(rgb) {
       if (!rgb || typeof rgb !== 'string') return null;
       const clean = rgb.replace(/^#/, '');
@@ -244,8 +1244,7 @@
       const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
       const isTree = sheetName === 'Standard Tree' || sheetName === 'Hard Mode Tree';
       const isIndex = sheetName === 'Index';
-      const isGuide = sheetName === 'How to read';
-      const maxCol = isTree ? 6 : range.e.c; // 0..6 (A..G) for tree tabs
+      const maxCol = isTree ? 6 : range.e.c;
 
       const tableClass = isTree ? 'sheet-tree' : (isIndex ? 'sheet-index' : 'sheet-guide');
       const parts = [`<table class="${tableClass}"><tbody>`];
@@ -254,7 +1253,6 @@
         const rowNum = r + 1;
         const rowId = `${slugify(sheetName)}-R${rowNum}`;
 
-        // Detect completely empty separator rows
         let rowHasContentOrFill = false;
         for (let c = range.s.c; c <= maxCol; c++) {
           const cell = ws[XLSX.utils.encode_cell({ r, c })];
@@ -269,7 +1267,6 @@
           continue;
         }
 
-        // Detect full-width navy banner rows on tree tabs (#1F3864 across A:G)
         const firstCell = ws[XLSX.utils.encode_cell({ r, c: 0 })];
         const firstFill = getFillHex(firstCell);
         if (isTree && firstFill === '#1F3864') {
@@ -308,7 +1305,6 @@
           }
 
           let innerHtml = escapedVal;
-          // Handle internal sheet hyperlinks on Index tab (e.g., #'Standard Tree'!A342)
           if (cell && cell.l && cell.l.Target && cell.l.Target.startsWith('#')) {
             const match = cell.l.Target.match(/^#'?([^'!]+)'?!([A-Z]+)(\d+)$/);
             if (match) {
@@ -330,12 +1326,20 @@
       return htmlCache[sheetName];
     }
 
+    function getCurrentTab() {
+      const active = document.querySelector('.tab-btn.active');
+      return active ? active.dataset.sheet : '';
+    }
+
     function switchTab(sheetName) {
       document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.sheet === sheetName);
       });
-      const output = document.getElementById('output');
-      output.innerHTML = renderSheetHtml(sheetName);
+      if (sheetName === SOLVER_TAB_NAME) {
+        renderSolverView();
+      } else {
+        document.getElementById('output').innerHTML = renderSheetHtml(sheetName);
+      }
       window.scrollTo({ top: 0 });
     }
 

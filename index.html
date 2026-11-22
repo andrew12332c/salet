@@ -13,9 +13,43 @@
       color: #222;
       background: #fff;
     }
+    .header-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
     h2 {
-      margin: 0 0 14px;
+      margin: 0;
       color: #1F3864;
+    }
+    .wb-status {
+      font-size: 12px;
+      padding: 5px 10px;
+      border-radius: 6px;
+      background: #f0f5fc;
+      color: #1F3864;
+      border: 1px solid #d0e0f5;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .wb-status.ready {
+      background: #edf7ed;
+      color: #1b5e20;
+      border-color: #b7dfb9;
+    }
+    .wb-status.warn {
+      background: #fef3f2;
+      color: #b42318;
+      border-color: #fecdca;
+    }
+    .file-pick-label {
+      cursor: pointer;
+      text-decoration: underline;
+      font-weight: bold;
     }
     .tabs {
       display: flex;
@@ -190,23 +224,7 @@
       justify-content: space-between;
       width: 100%;
       gap: 10px;
-      margin-bottom: 10px;
-    }
-    .solver-subbar {
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      width: 100%;
-      margin-bottom: 10px;
-      font-size: 12px;
-      color: #444;
-    }
-    .solver-subbar label {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      cursor: pointer;
-      user-select: none;
+      margin-bottom: 14px;
     }
     .mode-switch {
       display: inline-flex;
@@ -253,7 +271,7 @@
       display: grid;
       grid-template-rows: repeat(6, 1fr);
       gap: 6px;
-      margin: 4px 0 14px;
+      margin: 6px 0 14px;
     }
     .wordle-row {
       display: grid;
@@ -424,6 +442,27 @@
       border-radius: 6px;
       font-weight: bold;
     }
+    .clue-bar {
+      margin-top: 10px;
+      padding: 8px 12px;
+      background: #f8f9fa;
+      border: 1px solid #e1e4e8;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #444;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .clue-bar code {
+      font-size: 13px;
+      font-weight: bold;
+      letter-spacing: 2px;
+      color: #1F3864;
+      background: #e8eef7;
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
     .rec-box {
       margin-top: 12px;
       padding: 12px 14px;
@@ -455,6 +494,7 @@
     .badge-answer { background: #6AAA64; color: #fff; }
     .badge-win { background: #1F3864; color: #fff; }
     .badge-probe { background: #C9B458; color: #fff; }
+    .badge-ext { background: #6f42c1; color: #fff; }
 
     .tree-jump-btn {
       font-size: 12px;
@@ -473,18 +513,16 @@
 
     .candidates-header {
       display: flex;
+      flex-wrap: wrap;
       justify-content: space-between;
       align-items: center;
+      gap: 8px;
       margin-bottom: 10px;
     }
     .candidates-header h4 {
       margin: 0;
       font-size: 14px;
       color: #1F3864;
-    }
-    .candidates-sub {
-      font-size: 12px;
-      color: #666;
     }
     .word-chips {
       display: flex;
@@ -510,143 +548,1111 @@
       color: #fff;
       border-color: #1F3864;
     }
+    .sheet-placeholder {
+      padding: 24px;
+      border: 1px dashed #ccc;
+      border-radius: 8px;
+      color: #555;
+      background: #fafafa;
+      max-width: 620px;
+    }
   </style>
 </head>
 <body>
-  <h2>SALET Decision Tree Interactive Viewer</h2>
+  <div class="header-bar">
+    <h2>SALET Decision Tree Interactive Viewer</h2>
+    <div class="wb-status" id="wb-status">Loading SALET_decision_tree.xlsx…</div>
+  </div>
   <div class="tabs" id="tab-container"></div>
-  <div id="output">Loading workbook sheets...</div>
+  <div id="output"></div>
 
   <script>
     const SOLVER_TAB_NAME = 'Wordle Helper';
+    const DEFAULT_SHEET_TABS = ['How to read', 'Index', 'Standard Tree', 'Hard Mode Tree'];
     let workbook = null;
+    let workbookError = null;
     const htmlCache = {};
     const parsedTrees = {};
     let allAnswers = [];
-    let extendedPool = [];
 
-    // NYT-added Wordle answers & common 5-letter English words outside the original 2,309 list
-    const NYT_AND_EXTENDED_WORDS = [
-      'UPEND', 'SQUID', 'KAZOO', 'LASER', 'BALSA', 'GUANO', 'SNAFU', 'TAROT', 'MOMMY', 'PIZZA',
-      'PRIMP', 'UVULA', 'LEECH', 'CONDO', 'GECKO', 'BURLY', 'POUTY', 'ATONE', 'REBUS', 'CARAT',
-      'SCALP', 'CLACK', 'CRIMP', 'MOLDY', 'SPINY', 'SWATH', 'TRICE', 'VOUCH', 'WRING', 'ZESTY',
-      'BINGE', 'CADDY', 'DECAL', 'EMBED', 'FLOUT', 'GAUGE', 'HOIST', 'INERT', 'JOUST', 'KNACK',
-      'LOFTY', 'MIRTH', 'NICHE', 'OVERT', 'PLUMB', 'QUIRK', 'ROGUE', 'SHARD', 'TAUNT', 'USURP',
-      'VIGOR', 'WHISK', 'YEARN', 'ZONAL', 'UNFED', 'UNWED', 'UNLIT', 'UNMET', 'UNSET', 'UNTIE',
-      'ABIDE', 'ACTED', 'ADDED', 'AIDER', 'AIMED', 'AIRED', 'ALIEN', 'ALIGN', 'ALLAY', 'ALLEY',
-      'ALLOT', 'ALLOW', 'ALLOY', 'ALOFT', 'ALONE', 'ALONG', 'ALOOF', 'ALOUD', 'ALPHA', 'ALTAR',
-      'ALTER', 'AMASS', 'AMAZE', 'AMBER', 'AMBLE', 'AMEND', 'AMISS', 'AMITY', 'AMONG', 'AMPLE',
-      'AMPLY', 'AMUSE', 'ANGEL', 'ANGER', 'ANGLE', 'ANGRY', 'ANGST', 'ANIME', 'ANKLE', 'ANNEX',
-      'ANNOY', 'ANNUL', 'ANODE', 'ANTIC', 'ANVIL', 'AORTA', 'APART', 'APHID', 'APING', 'APNEA',
-      'APPLE', 'APPLY', 'APRON', 'APTLY', 'ARBOR', 'ARDOR', 'ARENA', 'ARGUE', 'ARISE', 'ARMOR',
-      'AROMA', 'AROSE', 'ARRAY', 'ARROW', 'ARSON', 'ARTSY', 'ASCOT', 'ASHEN', 'ASIDE', 'ASKED',
-      'ASKEW', 'ASSAY', 'ASSET', 'ATOLL', 'ATONE', 'ATTIC', 'AUDIO', 'AUDIT', 'AUGUR', 'AUNTY',
-      'AVAIL', 'AVERT', 'AVIAN', 'AVOID', 'AWAIT', 'AWAKE', 'AWARD', 'AWARE', 'AWASH', 'AWFUL',
-      'AWOKE', 'AXIAL', 'AXIOM', 'AXION', 'AZURE', 'BACON', 'BADGE', 'BADLY', 'BAGEL', 'BAGGY',
-      'BAKED', 'BAKER', 'BALER', 'BALMY', 'BANAL', 'BANJO', 'BARGE', 'BARON', 'BASAL', 'BASED',
-      'BASIC', 'BASIL', 'BASIN', 'BASIS', 'BASTE', 'BATCH', 'BATHE', 'BATON', 'BATTY', 'BAWDY',
-      'BAYOU', 'BEACH', 'BEADY', 'BEARD', 'BEAST', 'BEECH', 'BEEFY', 'BEFIT', 'BEGAN', 'BEGAT',
-      'BEGET', 'BEGIN', 'BEGUN', 'BEING', 'BELCH', 'BELIE', 'BELLE', 'BELLY', 'BELOW', 'BENCH',
-      'BERET', 'BERRY', 'BERTH', 'BESET', 'BETEL', 'BEVEL', 'BEZEL', 'BIBLE', 'BICEP', 'BIDDY',
-      'BIGOT', 'BIKED', 'BIKER', 'BILGE', 'BILLY', 'BINGO', 'BIOME', 'BIRCH', 'BIRTH', 'BISON',
-      'BITTY', 'BLACK', 'BLADE', 'BLAME', 'BLAND', 'BLANK', 'BLARE', 'BLAST', 'BLAZE', 'BLEAK',
-      'BLEAT', 'BLEED', 'BLEEP', 'BLEND', 'BLESS', 'BLIMP', 'BLIND', 'BLINK', 'BLISS', 'BLITZ',
-      'BLOAT', 'BLOCK', 'BLOKE', 'BLOND', 'BLOOD', 'BLOOM', 'BLOWN', 'BLUER', 'BLUFF', 'BLUNT',
-      'BLURB', 'BLURT', 'BLUSH', 'BOARD', 'BOAST', 'BOBBY', 'BONEY', 'BONGO', 'BONUS', 'BOOBY',
-      'BOOST', 'BOOTH', 'BOOTY', 'BOOZE', 'BOOZY', 'BORAX', 'BORED', 'BORNE', 'BOSOM', 'BOSSY',
-      'BOTCH', 'BOUGH', 'BOULE', 'BOUND', 'BOWEL', 'BOXED', 'BOXER', 'BRACE', 'BRAID', 'BRAIN',
-      'BRAKE', 'BRAND', 'BRASH', 'BRASS', 'BRAVE', 'BRAVO', 'BRAWL', 'BRAWN', 'BREAD', 'BREAK',
-      'BREED', 'BRIAR', 'BRIBE', 'BRICK', 'BRIDE', 'BRIEF', 'BRINE', 'BRING', 'BRINK', 'BRINY',
-      'BRISK', 'BROAD', 'BROIL', 'BROKE', 'BROOD', 'BROOK', 'BROOM', 'BROTH', 'BROWN', 'BRUNT',
-      'BRUSH', 'BRUTE', 'BUDDY', 'BUDGE', 'BUGGY', 'BUGLE', 'BUILD', 'BUILT', 'BULGE', 'BULKY',
-      'BULLY', 'BUNCH', 'BUNNY', 'BURLY', 'BURNT', 'BURST', 'BUSED', 'BUSHY', 'BUTCH', 'BUTTE',
-      'BUXOM', 'BUYER', 'BYLAW', 'CABAL', 'CABBY', 'CABIN', 'CABLE', 'CACAO', 'CACHE', 'CACTI',
-      'CADET', 'CAGEY', 'CAIRN', 'CAKED', 'CAMEL', 'CAMEO', 'CANAL', 'CANDY', 'CANNY', 'CANOE',
-      'CANON', 'CAPER', 'CAPUT', 'CARED', 'CARGO', 'CAROL', 'CARRY', 'CARVE', 'CASED', 'CASTE',
-      'CATCH', 'CATER', 'CATTY', 'CAULK', 'CAUSE', 'CAVIL', 'CEASE', 'CEDAR', 'CELLO', 'CHAFE',
-      'CHAFF', 'CHAIN', 'CHAIR', 'CHALK', 'CHAMP', 'CHANT', 'CHAOS', 'CHARD', 'CHARM', 'CHART',
-      'CHASE', 'CHASM', 'CHEAP', 'CHEAT', 'CHECK', 'CHEEK', 'CHEER', 'CHESS', 'CHEST', 'CHICK',
-      'CHIDE', 'CHIEF', 'CHILD', 'CHILI', 'CHILL', 'CHIME', 'CHINA', 'CHIRP', 'CHOCK', 'CHOIR',
-      'CHOKE', 'CHORD', 'CHORE', 'CHOSE', 'CHUCK', 'CHUMP', 'CHUNK', 'CHURN', 'CHUTE', 'CIDER',
-      'CIGAR', 'CINCH', 'CIRCA', 'CITED', 'CIVIC', 'CIVIL', 'CLAIM', 'CLAMP', 'CLANG', 'CLANK',
-      'CLASH', 'CLASP', 'CLASS', 'CLEAN', 'CLEAR', 'CLEAT', 'CLEFT', 'CLERK', 'CLICK', 'CLIFF',
-      'CLIMB', 'CLING', 'CLINK', 'CLOAK', 'CLOCK', 'CLONE', 'CLOSE', 'CLOTH', 'CLOUD', 'CLOUT',
-      'CLOVE', 'CLOWN', 'CLUCK', 'CLUED', 'CLUMP', 'CLUNG', 'COACH', 'COAST', 'COBRA', 'COCOA',
-      'CODED', 'COLON', 'COLOR', 'COMET', 'COMFY', 'COMIC', 'COMMA', 'CONCH', 'CONIC', 'COPED',
-      'COPSE', 'CORAL', 'CORER', 'CORNY', 'COUCH', 'COUGH', 'COULD', 'COUNT', 'COUPE', 'COURT',
-      'COVEN', 'COVER', 'COVET', 'COVEY', 'COWER', 'COYLY', 'CRACK', 'CRAFT', 'CRAMP', 'CRANE',
-      'CRANK', 'CRASH', 'CRASS', 'CRATE', 'CRAVE', 'CRAWL', 'CRAZE', 'CRAZY', 'CREAK', 'CREAM',
-      'CREDO', 'CREED', 'CREEK', 'CREEP', 'CREME', 'CREPE', 'CREPT', 'CRESS', 'CREST', 'CRICK',
-      'CRIED', 'CRIER', 'CRIME', 'CRISP', 'CROAK', 'CROCK', 'CRONE', 'CRONY', 'CROOK', 'CROSS',
-      'CROUP', 'CROWD', 'CROWN', 'CRUDE', 'CRUEL', 'CRUMB', 'CRUMP', 'CRUSH', 'CRUST', 'CRYPT',
-      'CUBIC', 'CUMIN', 'CURED', 'CURIO', 'CURLY', 'CURRY', 'CURSE', 'CURVE', 'CURVY', 'CUTIE',
-      'CYBER', 'CYCLE', 'CYNIC', 'DADDY', 'DAILY', 'DAIRY', 'DAISY', 'DALLY', 'DANCE', 'DANDY',
-      'DARED', 'DATED', 'DATUM', 'DAUNT', 'DEALT', 'DEATH', 'DEBAR', 'DEBIT', 'DEBUG', 'DEBUT',
-      'DECAY', 'DECOR', 'DECOY', 'DECRY', 'DEFER', 'DEIGN', 'DEITY', 'DELAY', 'DELTA', 'DELVE',
-      'DEMON', 'DEMUR', 'DENIM', 'DENSE', 'DEPOT', 'DEPTH', 'DERBY', 'DETER', 'DETOX', 'DEUCE',
-      'DEVIL', 'DIARY', 'DICEY', 'DIGIT', 'DILLY', 'DIMLY', 'DINER', 'DINGO', 'DINGY', 'DIODE',
-      'DIRGE', 'DIRTY', 'DISCO', 'DITCH', 'DITTO', 'DITTY', 'DIVER', 'DIZZY', 'DODGE', 'DODGY',
-      'DOGMA', 'DOING', 'DOLLY', 'DONOR', 'DONUT', 'DOPEY', 'DOUBT', 'DOUGH', 'DOWDY', 'DOWEL',
-      'DOWNY', 'DOWRY', 'DOZEN', 'DOZED', 'DRAFT', 'DRAIN', 'DRAKE', 'DRAMA', 'DRANK', 'DRAPE',
-      'DRAWL', 'DRAWN', 'DREAD', 'DREAM', 'DRESS', 'DRIED', 'DRIER', 'DRIFT', 'DRILL', 'DRINK',
-      'DRIVE', 'DROIT', 'DROLL', 'DRONE', 'DROOL', 'DROOP', 'DROSS', 'DROVE', 'DROWN', 'DRUID',
-      'DRUNK', 'DRYER', 'DRYLY', 'DUCHY', 'DULLY', 'DUMMY', 'DUMPY', 'DUNCE', 'DUSKY', 'DUSTY',
-      'DUTCH', 'DUVET', 'DWARF', 'DWELL', 'DWELT', 'DYING', 'EAGER', 'EAGLE', 'EARLY', 'EARTH',
-      'EASEL', 'EATEN', 'EATER', 'EBONY', 'ECLAT', 'EDICT', 'EDIFY', 'EERIE', 'EGRET', 'EIGHT',
-      'EJECT', 'EKING', 'ELATE', 'ELBOW', 'ELDER', 'ELECT', 'ELEGY', 'ELFIN', 'ELIDE', 'ELITE',
-      'ELOPE', 'ELUDE', 'EMAIL', 'EMBER', 'EMCEE', 'EMPTY', 'ENACT', 'ENDED', 'ENDOW', 'ENEMA',
-      'ENEMY', 'ENJOY', 'ENNUI', 'ENSUE', 'ENTER', 'ENTRY', 'ENVOY', 'EPOCH', 'EPOXY', 'EQUAL',
-      'EQUIP', 'ERASE', 'ERECT', 'ERODE', 'ERROR', 'ERUPT', 'ESSAY', 'ESTER', 'ETHER', 'ETHIC',
-      'ETHOS', 'ETUDE', 'EVADE', 'EVENT', 'EVERY', 'EVICT', 'EVOKE', 'EXACT', 'EXALT', 'EXCEL',
-      'EXERT', 'EXILE', 'EXIST', 'EXPEL', 'EXTOL', 'EXTRA', 'EXULT', 'EYING', 'FABLE', 'FACED',
-      'FACET', 'FADED', 'FAINT', 'FAIRY', 'FAITH', 'FAKED', 'FALSE', 'FAMED', 'FANCY', 'FANNY',
-      'FARCE', 'FARED', 'FATAL', 'FATTY', 'FAULT', 'FAUNA', 'FAVOR', 'FEAST', 'FECAL', 'FEIGN',
-      'FELLA', 'FELON', 'FEMME', 'FEMUR', 'FENCE', 'FERAL', 'FERRY', 'FETAL', 'FETCH', 'FETID',
-      'FETUS', 'FEVER', 'FEWER', 'FIBER', 'FIBRE', 'FICUS', 'FIELD', 'FIEND', 'FIERY', 'FIFTH',
-      'FIFTY', 'FIGHT', 'FILED', 'FILER', 'FILET', 'FILLY', 'FILMY', 'FILTH', 'FINAL', 'FINCH',
-      'FINED', 'FINER', 'FIRED', 'FIRST', 'FISHY', 'FIXED', 'FIXER', 'FIZZY', 'FJORD', 'FLACK',
-      'FLAIL', 'FLAIR', 'FLAKE', 'FLAKY', 'FLAME', 'FLANK', 'FLARE', 'FLASH', 'FLASK', 'FLECK',
-      'FLEET', 'FLESH', 'FLICK', 'FLIER', 'FLING', 'FLINT', 'FLIRT', 'FLOAT', 'FLOCK', 'FLOOD',
-      'FLOOR', 'FLORA', 'FLOSS', 'FLOUR', 'FLOWN', 'FLUFF', 'FLUID', 'FLUKE', 'FLUME', 'FLUNG',
-      'FLUNK', 'FLUSH', 'FLUTE', 'FLYER', 'FOAMY', 'FOCAL', 'FOCUS', 'FOGGY', 'FOIST', 'FOLIO',
-      'FOLLY', 'FORAY', 'FORCE', 'FORGE', 'FORGO', 'FORTE', 'FORTH', 'FORTY', 'FORUM', 'FOUND',
-      'FOYER', 'FRAIL', 'FRAME', 'FRANK', 'FRAUD', 'FREAK', 'FREED', 'FREER', 'FRESH', 'FRIAR',
-      'FRIED', 'FRILL', 'FRISK', 'FRITZ', 'FROCK', 'FROND', 'FRONT', 'FROST', 'FROTH', 'FROWN',
-      'FROZE', 'FRUIT', 'FUDGE', 'FUGUE', 'FULLY', 'FUNGI', 'FUNKY', 'FUNNY', 'FUROR', 'FURRY',
-      'FUSED', 'FUSSY', 'FUZZY', 'GAFFE', 'GAILY', 'GAMED', 'GAMER', 'GAMMA', 'GAMUT', 'GASSY',
-      'GATED', 'GAUDY', 'GAUNT', 'GAUZE', 'GAVEL', 'GAWKY', 'GAYER', 'GAYLY', 'GAZED', 'GAZER',
-      'GEESE', 'GENIE', 'GENRE', 'GHOST', 'GHOUL', 'GIANT', 'GIDDY', 'GIPSY', 'GIRLY', 'GIRTH',
-      'GIVEN', 'GIVER', 'GLADE', 'GLAND', 'GLARE', 'GLASS', 'GLAZE', 'GLEAM', 'GLEAN', 'GLIDE',
-      'GLINT', 'GLOAT', 'GLOBE', 'GLOOM', 'GLORY', 'GLOSS', 'GLOVE', 'GLUED', 'GLYPH', 'GNASH',
-      'GNOME', 'GODLY', 'GOING', 'GOLEM', 'GOLLY', 'GONAD', 'GONER', 'GOODY', 'GOOEY', 'GOOFY',
-      'GOOSE', 'GORGE', 'GOUGE', 'GOURD', 'GRACE', 'GRADE', 'GRAFT', 'GRAIL', 'GRAIN', 'GRAND',
-      'GRANT', 'GRAPE', 'GRAPH', 'GRASP', 'GRASS', 'GRATE', 'GRAVE', 'GRAVY', 'GRAZE', 'GREAT',
-      'GREED', 'GREEN', 'GREET', 'GRIEF', 'GRILL', 'GRIME', 'GRIMY', 'GRIND', 'GRIPE', 'GROAN',
-      'GROIN', 'GROOM', 'GROPE', 'GROSS', 'GROUP', 'GROUT', 'GROVE', 'GROWL', 'GROWN', 'GRUEL',
-      'GRUFF', 'GRUNT', 'GUARD', 'GUAVA', 'GUESS', 'GUEST', 'GUIDE', 'GUILD', 'GUILE', 'GUILT',
-      'GUISE', 'GULCH', 'GULLY', 'GUMBO', 'GUMMY', 'GUPPY', 'GUSTO', 'GUSTY', 'GYPSY', 'HABIT',
-      'HAIRY', 'HALVE', 'HANDY', 'HAPPY', 'HARDY', 'HAREM', 'HARPY', 'HARRY', 'HARSH', 'HASTE',
-      'HASTY', 'HATCH', 'HATED', 'HATER', 'HAUNT', 'HAUTE', 'HAVEN', 'HAVOC', 'HAZEL', 'HEADY',
-      'HEARD', 'HEART', 'HEATH', 'HEAVE', 'HEAVY', 'HEDGE', 'HEFTY', 'HEIST', 'HELIX', 'HELLO',
-      'HENCE', 'HERON', 'HILLY', 'HINGE', 'HIPPO', 'HIPPY', 'HIRED', 'HITCH', 'HOARD', 'HOBBY',
-      'HOLLY', 'HOMER', 'HONEY', 'HONOR', 'HOPED', 'HORDE', 'HORNY', 'HORSE', 'HOTEL', 'HOTLY',
-      'HOUND', 'HOUSE', 'HOVEL', 'HOVER', 'HOWDY', 'HUMAN', 'HUMID', 'HUMOR', 'HUMPH', 'HUMUS',
-      'HUNCH', 'HUNKY', 'HURRY', 'HUSKY', 'HUSSY', 'HUTCH', 'HYDRO', 'HYENA', 'HYMEN', 'HYPER',
-      'ICILY', 'ICING', 'IDEAL', 'IDIOM', 'IDIOT', 'IDLER', 'IDYLL', 'IGLOO', 'ILIAC', 'IMAGE',
-      'IMBUE', 'IMPEL', 'IMPLY', 'INANE', 'INBOX', 'INCUR', 'INDEX', 'INEPT', 'INGOT', 'INKED',
-      'INLAY', 'INLET', 'INNER', 'INPUT', 'INTER', 'INTRO', 'IONIC', 'IRATE', 'IRONY', 'ISLET',
-      'ISSUE', 'ITCHY', 'IVORY', 'JAUNT', 'JAZZY', 'JELLY', 'JERKY', 'JETTY', 'JEWEL', 'JIFFY',
-      'JOINT', 'JOKED', 'JOKER', 'JOLLY', 'JUDGE', 'JUICE', 'JUICY', 'JUMBO', 'JUMPY', 'JUNTA',
-      'JUNTO', 'JUROR', 'KAPPA', 'KARMA', 'KAYAK', 'KEBAB', 'KHAKI', 'KINKY', 'KIOSK', 'KITTY',
-      'KNAVE', 'KNEAD', 'KNEED', 'KNEEL', 'KNELT', 'KNIFE', 'KNOCK', 'KNOLL', 'KNOWN', 'KOALA',
-      'KRILL', 'LABEL', 'LABOR', 'LADEN', 'LADLE', 'LAGER', 'LANCE', 'LANKY', 'LAPEL', 'LAPSE',
-      'LARGE', 'LARVA', 'LASSO', 'LATCH', 'LATER', 'LATHE', 'LATTE', 'LAUGH', 'LAYER', 'LEACH',
-      'LEAFY', 'LEAKY', 'LEANT', 'LEAPT', 'LEARN', 'LEASE', 'LEASH', 'LEAST', 'LEAVE', 'LEDGE',
-      'LEERY', 'LEFTY', 'LEGAL', 'LEGGY', 'LEMON', 'LEMUR', 'LEPER', 'LEVEL', 'LEVER', 'LIBEL',
-      'LIEGE', 'LIGHT', 'LIKED', 'LIKEN', 'LILAC', 'LIMBO', 'LIMIT', 'LINED', 'LINEN', 'LINER',
-      'LINGO', 'LIPID', 'LITHE', 'LIVED', 'LIVER', 'LIVID', 'LLAMA', 'LOAMY', 'LOATH', 'LOBBY',
-      'LOCAL', 'LOCUS', 'LODGE', 'LOGIC', 'LOGIN', 'LOOPY', 'LOOSE', 'LORRY', 'LOSER', 'LOUSE',
-      'LOUSY', 'LOVED', 'LOVER', 'LOWER', 'LOWLY', 'LOYAL', 'LUCID', 'LUCKY', 'LUMEN', 'LUMPY',
-      'LUNAR', 'LUNCH', 'LUNGE', 'LUPUS', 'LURCH', 'LURID', 'LUSTY', 'LYING', 'LYMPH', 'LYNCH',
-      'LYRIC', 'MACAW', 'MACHO', 'MACRO', 'MADAM', 'MADLY', 'MAFIA', 'MAGIC', 'MAGMA', 'MAIZE',
-      'MAJOR', 'MAKER', 'MAM
+    // Post-2022 NYT Wordle additions & non-original answers that aren't in the 2,309 list
+    const NYT_ADDED_ANSWERS = [
+      'UPEND', 'SQUID', 'KAZOO', 'LASER', 'BALSA', 'GUANO', 'SNAFU', 'TAROT',
+      'MOMMY', 'PIZZA', 'UVULA', 'JAZZY', 'YOUTH', 'PSALM', 'SHUSH', 'TIZZY',
+      'NICHE', 'CACTI', 'FUNGI', 'OCTET', 'QUASH', 'SWATH', 'VOILA', 'WRYLY',
+      'XEROX', 'ZESTY', 'APHID', 'BICEP', 'CYNIC', 'DANDY', 'EGRET', 'FICUS',
+      'GECKO', 'HYENA', 'IGLOO', 'JUMBO', 'KAPPA', 'LEMUR', 'MANGO', 'NYMPH',
+      'OLIVE', 'PRISM', 'QUOTA', 'RUGBY', 'SALSA', 'TEMPO', 'UMBRA', 'VIXEN',
+      'WALTZ', 'YACHT', 'ZEBRA', 'UNFED', 'UNWED', 'BLOND', 'PRIMP', 'SKIFF',
+      'TRICE', 'WOKEN', 'YEARN', 'ZONAL', 'ATONE', 'BURLY', 'CHUMP', 'DEBIT',
+      'ELFIN', 'FLOUT', 'GRAFT', 'HOIST', 'IMPEL', 'JAUNT', 'KNEEL', 'LOFTY'
+    ];
+    let extendedDictionary = [...NYT_ADDED_ANSWERS];
+
+    // Wordle Helper State
+    const solverState = {
+      mode: 'Standard Tree',
+      useExtendedDict: false,
+      rows: [],
+      activeRow: 0,
+      solved: false,
+      statusTitle: 'Step 1: Enter SALET Colors',
+      statusHtml: 'Click the tiles on Row 1 to cycle their colors (<b>Gray → Yellow → Green</b>) to match your Wordle feedback, or type any 5-letter word, then press <b>Enter</b>.',
+      statusType: 'normal',
+      recommendation: null,
+      candidates: [],
+      usingFallbackPool: false
+    };
+
+    const RGB_TO_STATE = {
+      '00787C7E': 'B',
+      '00C9B458': 'Y',
+      '006AAA64': 'G'
+    };
+
+    /* ================= IMMEDIATE UI BOOTSTRAP ================= */
+    function renderTabButtons(sheetNames) {
+      const activeBefore = getCurrentTab() || SOLVER_TAB_NAME;
+      const container = document.getElementById('tab-container');
+      container.innerHTML = '';
+
+      const allTabs = [SOLVER_TAB_NAME, ...sheetNames];
+      allTabs.forEach((tabName) => {
+        const btn = document.createElement('button');
+        btn.className = 'tab-btn' + (tabName === SOLVER_TAB_NAME ? ' solver-tab' : '') + (tabName === activeBefore ? ' active' : '');
+        btn.dataset.sheet = tabName;
+        btn.textContent = tabName === SOLVER_TAB_NAME ? '🟩 Wordle Helper' : tabName;
+        btn.onclick = () => switchTab(tabName);
+        container.appendChild(btn);
+      });
+    }
+
+    function setWorkbookStatus(state, html) {
+      const el = document.getElementById('wb-status');
+      if (!el) return;
+      el.className = 'wb-status' + (state ? ` ${state}` : '');
+      el.innerHTML = html;
+    }
+
+    // Render tabs & Wordle Helper immediately so the page never stalls on a blank screen
+    renderTabButtons(DEFAULT_SHEET_TABS);
+    resetSolver();
+    switchTab(SOLVER_TAB_NAME);
+
+    /* ================= RESILIENT XLSX & DICTIONARY LOADING ================= */
+    function ensureXlsxLibrary() {
+      if (window.XLSX) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+        script.onload = () => window.XLSX ? resolve() : reject(new Error('XLSX missing'));
+        script.onerror = () => reject(new Error('Failed to load SheetJS CDN'));
+        document.head.appendChild(script);
+      });
+    }
+
+    function fetchWithTimeout(url, timeoutMs = 8000) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      return fetch(url, { signal: controller.signal })
+        .then(res => {
+          clearTimeout(timer);
+          if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+          return res.arrayBuffer();
+        })
+        .catch(err => {
+          clearTimeout(timer);
+          throw err;
+        });
+    }
+
+    function loadWorkbookFromBuffer(buffer) {
+      workbook = XLSX.read(buffer, { type: 'array', cellStyles: true });
+      workbookError = null;
+      Object.keys(htmlCache).forEach(k => delete htmlCache[k]);
+
+      parsedTrees['Standard Tree'] = parseDecisionTree('Standard Tree');
+      parsedTrees['Hard Mode Tree'] = parseDecisionTree('Hard Mode Tree');
+
+      const wordSet = new Set();
+      for (const treeKey of ['Standard Tree', 'Hard Mode Tree']) {
+        if (!parsedTrees[treeKey]) continue;
+        for (const p1 of Object.keys(parsedTrees[treeKey])) {
+          const blocks = parsedTrees[treeKey][p1].blocks;
+          for (const p2 of Object.keys(blocks)) {
+            for (const w of blocks[p2].answers) {
+              wordSet.add(w);
+            }
+          }
+        }
+      }
+      allAnswers = Array.from(wordSet);
+
+      renderTabButtons(workbook.SheetNames);
+      setWorkbookStatus('ready', `✓ Tree loaded (${allAnswers.length.toLocaleString()} answers)`);
+
+      if (solverState.rows.some(r => r.locked)) {
+        recomputeFromLockedRows();
+      } else {
+        solverState.candidates = [...allAnswers];
+      }
+
+      const cur = getCurrentTab();
+      if (cur === SOLVER_TAB_NAME) {
+        renderSolverView();
+      } else {
+        document.getElementById('output').innerHTML = renderSheetHtml(cur);
+      }
+    }
+
+    function handleManualFileUpload(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      setWorkbookStatus('', `Parsing ${escapeHtml(file.name)}…`);
+      file.arrayBuffer()
+        .then(buf => ensureXlsxLibrary().then(() => loadWorkbookFromBuffer(buf)))
+        .catch(err => {
+          console.error(err);
+          setWorkbookStatus('warn', `Could not read ${escapeHtml(file.name)}.`);
+        });
+    }
+
+    (async function initWorkbook() {
+      try {
+        await ensureXlsxLibrary();
+        const candidateUrls = [
+          'SALET_decision_tree.xlsx',
+          'https://raw.githubusercontent.com/andrew12332c/salet/main/SALET_decision_tree.xlsx',
+          'https://raw.githubusercontent.com/andrew12332c/salet/master/SALET_decision_tree.xlsx'
+        ];
+        let loaded = false;
+        let lastErr = null;
+        for (const url of candidateUrls) {
+          try {
+            const buf = await fetchWithTimeout(url, 8000);
+            loadWorkbookFromBuffer(buf);
+            loaded = true;
+            break;
+          } catch (e) {
+            lastErr = e;
+          }
+        }
+        if (!loaded) throw lastErr || new Error('All workbook URLs failed');
+      } catch (err) {
+        console.error('Workbook load failed:', err);
+        workbookError = err;
+        setWorkbookStatus(
+          'warn',
+          `Tree file not auto-loaded · <label class="file-pick-label">Select SALET_decision_tree.xlsx<input type="file" accept=".xlsx" style="display:none" onchange="handleManualFileUpload(event)"></label>`
+        );
+        const cur = getCurrentTab();
+        if (cur !== SOLVER_TAB_NAME) switchTab(cur);
+      }
+    })();
+
+    // Background fetch of full 5-letter Wordle dictionary so NYT-added words always resolve
+    fetch('https://raw.githubusercontent.com/tabatkins/wordle-list/main/words')
+      .then(r => r.ok ? r.text() : '')
+      .then(txt => {
+        if (!txt) return;
+        const extra = txt
+          .split(/\r?\n/)
+          .map(w => w.trim().toUpperCase())
+          .filter(w => /^[A-Z]{5}$/.test(w));
+        if (extra.length > 1000) {
+          const merged = new Set([...NYT_ADDED_ANSWERS, ...extra]);
+          extendedDictionary = Array.from(merged);
+          if (solverState.rows.some(r => r.locked)) {
+            recomputeFromLockedRows();
+            if (getCurrentTab() === SOLVER_TAB_NAME) renderSolverView();
+          }
+        }
+      })
+      .catch(() => { /* Offline fallback uses NYT_ADDED_ANSWERS */ });
+
+    /* ================= PARSE DECISION TREES FROM XLSX ================= */
+    function getCellRgb(ws, r, c) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      if (!cell || !cell.s) return null;
+      const fg = cell.s.fgColor || (cell.s.fill && cell.s.fill.fgColor);
+      if (!fg || !fg.rgb) return null;
+      const clean = fg.rgb.replace(/^#/, '').toUpperCase();
+      return clean.length === 6 ? '00' + clean : clean;
+    }
+
+    function getCellText(ws, r, c) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      return cell && cell.v !== undefined && cell.v !== null ? String(cell.v).trim() : '';
+    }
+
+    function parseDecisionTree(sheetName) {
+      const ws = workbook.Sheets[sheetName];
+      if (!ws) return {};
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      const patterns = {};
+      let currentPat = null;
+      let r = 0;
+
+      while (r <= range.e.r) {
+        const vals = [0, 1, 2, 3, 4, 5, 6].map(c => getCellText(ws, r, c));
+        const fills = [0, 1, 2, 3, 4, 5, 6].map(c => getCellRgb(ws, r, c));
+
+        if (vals.every(v => !v) && fills.every(f => !f)) {
+          r++;
+          continue;
+        }
+
+        if (fills[0] === '001F3864') {
+          const banner = vals[0];
+          const best2 = banner.split('best 2nd guess: ')[1]?.trim() || '';
+          const stats = banner.split('·')[1]?.trim() || '';
+          currentPat = {
+            banner,
+            bannerRow: r + 1,
+            best2,
+            stats,
+            blocks: {}
+          };
+          r++;
+          continue;
+        }
+
+        if (!currentPat) {
+          r++;
+          continue;
+        }
+
+        const p1 = [0, 1, 2, 3, 4].map(i => RGB_TO_STATE[fills[i]] || 'B').join('');
+        if (!patterns[p1]) patterns[p1] = currentPat;
+
+        const w2 = [0, 1, 2, 3, 4].map(i => getCellText(ws, r + 1, i)).join('');
+        const p2 = [0, 1, 2, 3, 4].map(i => RGB_TO_STATE[getCellRgb(ws, r + 1, i)] || 'B').join('');
+        const desc2 = getCellText(ws, r + 1, 6);
+
+        if (p2 === 'GGGGG') {
+          patterns[p1].blocks[p2] = {
+            startRow: r + 1,
+            guess2: w2,
+            pattern2: p2,
+            desc2,
+            solvedOn2: true,
+            guess3: null,
+            guess3IsAnswer: true,
+            desc3: '',
+            answers: [w2]
+          };
+          r += 2;
+          continue;
+        }
+
+        const w3 = [0, 1, 2, 3, 4].map(i => getCellText(ws, r + 2, i)).join('');
+        const fill3 = getCellRgb(ws, r + 2, 0);
+        const desc3 = getCellText(ws, r + 2, 6);
+
+        if (fill3 === '006AAA64') {
+          patterns[p1].blocks[p2] = {
+            startRow: r + 1,
+            guess2: w2,
+            pattern2: p2,
+            desc2,
+            solvedOn2: false,
+            guess3: w3,
+            guess3IsAnswer: true,
+            desc3,
+            answers: [w3]
+          };
+          r += 3;
+          continue;
+        }
+
+        const answers = [];
+        let rr = r + 3;
+        while (rr <= range.e.r) {
+          const rowWords = [0, 1, 2, 3, 4].map(c => getCellText(ws, rr, c));
+          const rowFill = getCellRgb(ws, rr, 0);
+          if (rowWords.every(v => !v) && !rowFill) break;
+          for (const w of rowWords) {
+            if (w) answers.push(w);
+          }
+          rr++;
+        }
+
+        patterns[p1].blocks[p2] = {
+          startRow: r + 1,
+          guess2: w2,
+          pattern2: p2,
+          desc2,
+          solvedOn2: false,
+          guess3: w3,
+          guess3IsAnswer: false,
+          desc3,
+          answers
+        };
+        r = rr;
+      }
+      return patterns;
+    }
+
+    /* ================= WORDLE MATCHING & SOLVER ENGINE ================= */
+    function computeWordleFeedback(guess, answer) {
+      const res = ['B', 'B', 'B', 'B', 'B'];
+      const counts = {};
+      for (let i = 0; i < 5; i++) {
+        const ch = answer[i];
+        counts[ch] = (counts[ch] || 0) + 1;
+      }
+      for (let i = 0; i < 5; i++) {
+        if (guess[i] === answer[i]) {
+          res[i] = 'G';
+          counts[guess[i]]--;
+        }
+      }
+      for (let i = 0; i < 5; i++) {
+        if (res[i] === 'B' && counts[guess[i]] > 0) {
+          res[i] = 'Y';
+          counts[guess[i]]--;
+        }
+      }
+      return res.join('');
+    }
+
+    function filterCandidates(wordList, lockedRows) {
+      return wordList.filter(ans => {
+        for (const row of lockedRows) {
+          const g = row.letters.join('');
+          const p = row.colors.join('');
+          if (computeWordleFeedback(g, ans) !== p) return false;
+        }
+        return true;
+      });
+    }
+
+    function getExtendedPool() {
+      const seen = new Set(allAnswers);
+      const merged = [...allAnswers];
+      for (const w of extendedDictionary) {
+        if (!seen.has(w)) {
+          seen.add(w);
+          merged.push(w);
+        }
+      }
+      return merged;
+    }
+
+    function getClueSummary(lockedRows) {
+      const greens = ['_', '_', '_', '_', '_'];
+      const present = new Set();
+      const allLetters = new Set();
+
+      for (const row of lockedRows) {
+        for (let i = 0; i < 5; i++) {
+          const ch = row.letters[i];
+          const st = row.colors[i];
+          if (!ch) continue;
+          allLetters.add(ch);
+          if (st === 'G') {
+            greens[i] = ch;
+            present.add(ch);
+          } else if (st === 'Y') {
+            present.add(ch);
+          }
+        }
+      }
+
+      const excluded = Array.from(allLetters).filter(ch => !present.has(ch)).sort();
+      return {
+        pattern: greens.join(' '),
+        present: Array.from(present).sort(),
+        excluded
+      };
+    }
+
+    function makeEmptyRow(word = '', colors = ['B', 'B', 'B', 'B', 'B'], pristine = false) {
+      const chars = word.toUpperCase().padEnd(5, ' ').slice(0, 5).split('').map(c => c === ' ' ? '' : c);
+      return {
+        letters: chars,
+        colors: [...colors],
+        locked: false,
+        pristine
+      };
+    }
+
+    function resetSolver() {
+      solverState.rows = [
+        makeEmptyRow('SALET', ['B', 'B', 'B', 'B', 'B'], true),
+        makeEmptyRow(),
+        makeEmptyRow(),
+        makeEmptyRow(),
+        makeEmptyRow(),
+        makeEmptyRow()
+      ];
+      solverState.activeRow = 0;
+      solverState.solved = false;
+      solverState.useExtendedDict = false;
+      solverState.usingFallbackPool = false;
+      solverState.statusTitle = 'Step 1: Enter SALET Colors';
+      solverState.statusHtml = 'Click the tiles on Row 1 to cycle their colors (<b>Gray → Yellow → Green</b>) to match your Wordle feedback, or type any 5-letter word, then press <b>Enter</b>.';
+      solverState.statusType = 'normal';
+      solverState.recommendation = null;
+      solverState.candidates = allAnswers.length ? [...allAnswers] : getExtendedPool();
+      if (getCurrentTab() === SOLVER_TAB_NAME) renderSolverView();
+    }
+
+    function setSolverMode(mode) {
+      if (solverState.mode === mode) return;
+      solverState.mode = mode;
+      recomputeFromLockedRows();
+      renderSolverView();
+    }
+
+    function toggleExtendedDict() {
+      solverState.useExtendedDict = !solverState.useExtendedDict;
+      recomputeFromLockedRows();
+      renderSolverView();
+    }
+
+    function cycleTileColor(r, c) {
+      if (r > solverState.activeRow) return;
+      const row = solverState.rows[r];
+      if (!row.letters[c]) return;
+
+      const order = ['B', 'Y', 'G'];
+      const next = order[(order.indexOf(row.colors[c]) + 1) % 3];
+      row.colors[c] = next;
+      row.pristine = false;
+
+      if (r < solverState.activeRow) {
+        for (let i = r + 1; i < 6; i++) {
+          solverState.rows[i] = makeEmptyRow();
+        }
+        row.locked = false;
+        solverState.activeRow = r;
+        solverState.solved = false;
+        recomputeFromLockedRows();
+      }
+      renderSolverView();
+    }
+
+    function setActiveRowAllGray() {
+      if (solverState.solved) return;
+      const row = solverState.rows[solverState.activeRow];
+      row.colors = ['B', 'B', 'B', 'B', 'B'];
+      row.pristine = false;
+      renderSolverView();
+    }
+
+    function clearActiveRowWord() {
+      if (solverState.solved) return;
+      solverState.rows[solverState.activeRow] = makeEmptyRow();
+      renderSolverView();
+    }
+
+    function undoLastRow() {
+      if (solverState.activeRow === 0 && !solverState.solved) return;
+      const targetIdx = solverState.solved ? solverState.activeRow : solverState.activeRow - 1;
+      for (let i = targetIdx + 1; i < 6; i++) {
+        solverState.rows[i] = makeEmptyRow();
+      }
+      solverState.rows[targetIdx].locked = false;
+      solverState.activeRow = targetIdx;
+      solverState.solved = false;
+      recomputeFromLockedRows();
+      renderSolverView();
+    }
+
+    function useCandidateWord(word) {
+      if (solverState.solved || solverState.activeRow >= 6) return;
+      solverState.rows[solverState.activeRow] = makeEmptyRow(word, ['B', 'B', 'B', 'B', 'B'], false);
+      renderSolverView();
+    }
+
+    function handleTypeLetter(letter) {
+      if (getCurrentTab() !== SOLVER_TAB_NAME || solverState.solved) return;
+      const row = solverState.rows[solverState.activeRow];
+      if (!row) return;
+
+      if (row.pristine) {
+        row.letters = ['', '', '', '', ''];
+        row.colors = ['B', 'B', 'B', 'B', 'B'];
+        row.pristine = false;
+      }
+
+      const emptyIdx = row.letters.findIndex(ch => ch === '');
+      if (emptyIdx !== -1) {
+        row.letters[emptyIdx] = letter.toUpperCase();
+        renderSolverView();
+      }
+    }
+
+    function handleBackspace() {
+      if (getCurrentTab() !== SOLVER_TAB_NAME || solverState.solved) return;
+      const row = solverState.rows[solverState.activeRow];
+      if (!row) return;
+      row.pristine = false;
+      for (let i = 4; i >= 0; i--) {
+        if (row.letters[i] !== '') {
+          row.letters[i] = '';
+          row.colors[i] = 'B';
+          renderSolverView();
+          return;
+        }
+      }
+    }
+
+    function confirmActiveRow() {
+      if (solverState.solved) return;
+      const r = solverState.activeRow;
+      const row = solverState.rows[r];
+      if (row.letters.some(ch => ch === '')) {
+        solverState.statusTitle = 'Incomplete Word';
+        solverState.statusHtml = 'Please enter all 5 letters before confirming.';
+        solverState.statusType = 'error';
+        renderSolverView();
+        return;
+      }
+
+      row.locked = true;
+      row.pristine = false;
+
+      if (row.colors.join('') === 'GGGGG') {
+        solverState.solved = true;
+        solverState.statusTitle = `Solved in ${r + 1}!`;
+        solverState.statusHtml = `🎉 <b>${row.letters.join('')}</b> is the answer! Click <b>New Game</b> to start another puzzle.`;
+        solverState.statusType = 'solved';
+        solverState.recommendation = null;
+        solverState.candidates = [row.letters.join('')];
+        renderSolverView();
+        return;
+      }
+
+      if (r >= 5) {
+        solverState.solved = true;
+        const locked = solverState.rows.filter(x => x.locked);
+        let rem = filterCandidates(allAnswers, locked);
+        if (rem.length === 0) rem = filterCandidates(getExtendedPool(), locked);
+        solverState.candidates = rem;
+        solverState.statusTitle = 'Out of Guesses (6/6)';
+        solverState.statusHtml = rem.length
+          ? `Possible remaining answer${rem.length > 1 ? 's' : ''}: <b>${rem.join(', ')}</b>`
+          : 'No matching words found. Click any tile above to fix a color.';
+        solverState.statusType = 'error';
+        solverState.recommendation = null;
+        renderSolverView();
+        return;
+      }
+
+      solverState.activeRow = r + 1;
+      recomputeFromLockedRows();
+      renderSolverView();
+    }
+
+    function recomputeFromLockedRows() {
+      const locked = solverState.rows.filter(r => r.locked);
+      const tree = parsedTrees[solverState.mode] || {};
+      const nextIdx = solverState.activeRow;
+      solverState.usingFallbackPool = false;
+
+      if (locked.length === 0) {
+        solverState.statusTitle = 'Step 1: Enter SALET Colors';
+        solverState.statusHtml = 'Click the tiles on Row 1 to cycle their colors (<b>Gray → Yellow → Green</b>) to match your Wordle feedback, or type any 5-letter word, then press <b>Enter</b>.';
+        solverState.statusType = 'normal';
+        solverState.recommendation = null;
+        solverState.candidates = (solverState.useExtendedDict || !allAnswers.length) ? getExtendedPool() : [...allAnswers];
+        return;
+      }
+
+      const g1 = locked[0].letters.join('');
+      const p1 = locked[0].colors.join('');
+
+      // Step 2: Evaluating after Guess 1
+      if (locked.length === 1 && !solverState.useExtendedDict && g1 === 'SALET' && tree[p1]) {
+        const patData = tree[p1];
+        const filtered = filterCandidates(allAnswers, locked);
+        solverState.candidates = filtered;
+        solverState.rows[nextIdx] = makeEmptyRow(patData.best2, ['B', 'B', 'B', 'B', 'B'], true);
+        solverState.statusTitle = `Step 2: Play ${patData.best2}`;
+        solverState.statusHtml = `SALET feedback matched (${patData.stats}). <b>${patData.best2}</b> has been populated into Row 2 — enter its colors next.`;
+        solverState.statusType = 'normal';
+        solverState.recommendation = {
+          word: patData.best2,
+          tag: 'Best 2nd Guess',
+          tagClass: 'badge-win',
+          note: patData.stats,
+          targetSheet: solverState.mode,
+          targetRow: patData.bannerRow
+        };
+        return;
+      }
+
+      // Step 3: Evaluating after Guess 1 + Guess 2
+      if (locked.length === 2 && g1 === 'SALET' && tree[p1] && !solverState.useExtendedDict) {
+        const g2 = locked[1].letters.join('');
+        const p2 = locked[1].colors.join('');
+        const patData = tree[p1];
+        if (g2 === patData.best2 && patData.blocks[p2]) {
+          const blk = patData.blocks[p2];
+          solverState.candidates = [...blk.answers];
+
+          if (blk.guess3IsAnswer) {
+            solverState.rows[nextIdx] = makeEmptyRow(blk.guess3, ['G', 'G', 'G', 'G', 'G'], true);
+            solverState.statusTitle = `Step 3: Answer Found — ${blk.guess3}!`;
+            solverState.statusHtml = `Only <b>1</b> word in the original 2,309 list remains: <b>${blk.guess3}</b> (populated in green on Row 3). If NYT used a newer word, click <b>Include Extended Dictionary</b>.`;
+            solverState.statusType = 'solved';
+            solverState.recommendation = {
+              word: blk.guess3,
+              tag: 'Only Answer Left',
+              tagClass: 'badge-answer',
+              note: blk.desc3 || `${blk.guess3} is the answer`,
+              targetSheet: solverState.mode,
+              targetRow: blk.startRow
+            };
+          } else {
+            const isProbe = (blk.desc3 || '').toLowerCase().includes('probe');
+            solverState.rows[nextIdx] = makeEmptyRow(blk.guess3, ['B', 'B', 'B', 'B', 'B'], true);
+            solverState.statusTitle = `Step 3: Play ${blk.guess3}`;
+            solverState.statusHtml = `${blk.desc3 || `Best 3rd guess: ${blk.guess3}`}. Populated into Row 3 — enter its colors if not solved.`;
+            solverState.statusType = 'normal';
+            solverState.recommendation = {
+              word: blk.guess3,
+              tag: isProbe ? 'Probe' : 'Can Win Now',
+              tagClass: isProbe ? 'badge-probe' : 'badge-win',
+              note: `${blk.answers.length} possible answers left`,
+              targetSheet: solverState.mode,
+              targetRow: blk.startRow
+            };
+          }
+          return;
+        }
+      }
+
+      // General filtering across original 2,309 answers first, then automatic extended dictionary fallback
+      let basePool = (solverState.useExtendedDict || !allAnswers.length) ? getExtendedPool() : allAnswers;
+      if (!solverState.useExtendedDict && g1 === 'SALET' && tree[p1] && locked.length >= 2) {
+        const g2 = locked[1].letters.join('');
+        const p2 = locked[1].colors.join('');
+        if (g2 === tree[p1].best2 && tree[p1].blocks[p2]) {
+          basePool = tree[p1].blocks[p2].answers;
+        }
+      }
+
+      let remaining = filterCandidates(basePool, locked);
+
+      // Automatic fallback if 0 matches in the 2,309 list (catches NYT-added answers like UPEND!)
+      if (remaining.length === 0 && !solverState.useExtendedDict) {
+        const extMatches = filterCandidates(getExtendedPool(), locked);
+        if (extMatches.length > 0) {
+          remaining = extMatches;
+          solverState.usingFallbackPool = true;
+        }
+      }
+
+      solverState.candidates = remaining;
+
+      if (remaining.length === 0) {
+        solverState.rows[nextIdx] = makeEmptyRow();
+        solverState.statusTitle = 'No Matching Words Found';
+        solverState.statusHtml = 'No words in the 2,309 list or extended dictionary match those colors. Click any tile above to double-check a color.';
+        solverState.statusType = 'error';
+        solverState.recommendation = null;
+      } else if (remaining.length === 1) {
+        const winWord = remaining[0];
+        const fromExt = solverState.usingFallbackPool || solverState.useExtendedDict;
+        solverState.rows[nextIdx] = makeEmptyRow(winWord, ['G', 'G', 'G', 'G', 'G'], true);
+        solverState.statusTitle = `Answer Found — ${winWord}!`;
+        solverState.statusHtml = fromExt
+          ? `Matched <b>${winWord}</b> from the extended NYT/English Wordle dictionary (populated in green on Row ${nextIdx + 1})!`
+          : `Only <b>1</b> possible word matches all your clues: <b>${winWord}</b> (populated on Row ${nextIdx + 1}).`;
+        solverState.statusType = 'solved';
+        solverState.recommendation = {
+          word: winWord,
+          tag: fromExt ? 'Extended Word Match' : 'Only Answer Left',
+          tagClass: fromExt ? 'badge-ext' : 'badge-answer',
+          note: fromExt ? 'Added outside original 2,309 list' : '100% narrowed down',
+          targetSheet: null,
+          targetRow: null
+        };
+      } else {
+        const topPick = remaining[0];
+        const fromExt = solverState.usingFallbackPool || solverState.useExtendedDict;
+        solverState.rows[nextIdx] = makeEmptyRow(topPick, ['B', 'B', 'B', 'B', 'B'], true);
+        solverState.statusTitle = `Step ${nextIdx + 1}: ${remaining.length} Words Left`;
+        solverState.statusHtml = fromExt
+          ? `Found <b>${remaining.length}</b> matches in the extended dictionary. Populated <b>${topPick}</b> into Row ${nextIdx + 1}.`
+          : `Populated most common remaining word <b>${topPick}</b> into Row ${nextIdx + 1} (or click any candidate below to use it instead).`;
+        solverState.statusType = 'normal';
+        solverState.recommendation = {
+          word: topPick,
+          tag: fromExt ? 'Extended Match' : 'Top Remaining',
+          tagClass: fromExt ? 'badge-ext' : 'badge-win',
+          note: `${remaining.length} candidates left`,
+          targetSheet: null,
+          targetRow: null
+        };
+      }
+    }
+
+    function getLetterKeyStates() {
+      const priority = { B: 1, Y: 2, G: 3 };
+      const map = {};
+      for (const row of solverState.rows) {
+        if (!row.locked) continue;
+        for (let i = 0; i < 5; i++) {
+          const ch = row.letters[i];
+          const st = row.colors[i];
+          if (ch && (!map[ch] || priority[st] > priority[map[ch]])) {
+            map[ch] = st;
+          }
+        }
+      }
+      return map;
+    }
+
+    function renderSolverView() {
+      const output = document.getElementById('output');
+      const keyStates = getLetterKeyStates();
+      const activeRowObj = solverState.rows[solverState.activeRow];
+      const cursorCol = (!solverState.solved && activeRowObj)
+        ? activeRowObj.letters.findIndex(ch => ch === '')
+        : -1;
+
+      let gridHtml = '<div class="wordle-grid">';
+      solverState.rows.forEach((row, rIdx) => {
+        gridHtml += '<div class="wordle-row">';
+        for (let cIdx = 0; cIdx < 5; cIdx++) {
+          const ch = row.letters[cIdx];
+          const st = row.colors[cIdx];
+          const isActive = !solverState.solved && rIdx === solverState.activeRow;
+          const isLocked = row.locked;
+          const classes = ['w-tile'];
+          if (isActive) classes.push('active-row');
+          if (isLocked) classes.push('locked-row');
+          if (isActive && cIdx === cursorCol && !row.pristine) classes.push('cursor-focus');
+          if (ch) classes.push(`state-${st}`);
+
+          const clickAttr = (isActive || isLocked) ? ` onclick="cycleTileColor(${rIdx}, ${cIdx})"` : '';
+          const titleAttr = (isActive || isLocked) && ch ? ' title="Click to cycle Gray → Yellow → Green"' : '';
+          gridHtml += `<div class="${classes.join(' ')}"${clickAttr}${titleAttr}>${escapeHtml(ch)}</div>`;
+        }
+        gridHtml += '</div>';
+      });
+      gridHtml += '</div>';
+
+      const oskRows = [
+        ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+        ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+        ['ENTER', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', '⌫']
+      ];
+      let oskHtml = '<div class="osk">';
+      for (const keys of oskRows) {
+        oskHtml += '<div class="osk-row">';
+        for (const k of keys) {
+          if (k === 'ENTER') {
+            oskHtml += `<button class="osk-key wide" onclick="confirmActiveRow()">ENTER</button>`;
+          } else if (k === '⌫') {
+            oskHtml += `<button class="osk-key wide" onclick="handleBackspace()">⌫</button>`;
+          } else {
+            const st = keyStates[k] ? ` key-${keyStates[k]}` : '';
+            oskHtml += `<button class="osk-key${st}" onclick="handleTypeLetter('${k}')">${k}</button>`;
+          }
+        }
+        oskHtml += '</div>';
+      }
+      oskHtml += '</div>';
+
+      let recHtml = '';
+      if (solverState.recommendation) {
+        const rec = solverState.recommendation;
+        const jumpBtn = rec.targetSheet && workbook
+          ? `<button class="tree-jump-btn" onclick="jumpToBlock(event, '${rec.targetSheet}', ${rec.targetRow})">View block in Tree ↗</button>`
+          : '';
+        recHtml = `
+          <div class="rec-box">
+            <div>
+              <span class="rec-word">${escapeHtml(rec.word)}</span>
+              <span class="badge ${rec.tagClass}">${escapeHtml(rec.tag)}</span>
+              <div style="font-size:12px;color:#555;margin-top:3px;">${escapeHtml(rec.note)}</div>
+            </div>
+            ${jumpBtn}
+          </div>
+        `;
+      }
+
+      const lockedRows = solverState.rows.filter(r => r.locked);
+      let clueBarHtml = '';
+      if (lockedRows.length > 0) {
+        const clues = getClueSummary(lockedRows);
+        clueBarHtml = `
+          <div class="clue-bar">
+            <span>Pattern: <code>${escapeHtml(clues.pattern)}</code></span>
+            <span>In word: <b>${clues.present.length ? clues.present.join(', ') : '—'}</b></span>
+            <span>Ruled out: <b>${clues.excluded.length ? clues.excluded.join(', ') : '—'}</b></span>
+          </div>
+        `;
+      }
+
+      const maxChips = 150;
+      const shownWords = solverState.candidates.slice(0, maxChips);
+      const chipsHtml = shownWords.map(w =>
+        `<button class="word-chip" onclick="useCandidateWord('${w}')" title="Load ${w} into active row">${w}</button>`
+      ).join('');
+      const extraCount = solverState.candidates.length - shownWords.length;
+
+      const dictToggleLabel = solverState.useExtendedDict
+        ? 'Using Extended Dictionary ✓'
+        : 'Include Extended Dictionary';
+
+      output.innerHTML = `
+        <div class="solver-layout">
+          <div class="board-panel">
+            <div class="solver-toolbar">
+              <div class="mode-switch">
+                <button class="mode-btn ${solverState.mode === 'Standard Tree' ? 'active' : ''}" onclick="setSolverMode('Standard Tree')">Standard</button>
+                <button class="mode-btn ${solverState.mode === 'Hard Mode Tree' ? 'active' : ''}" onclick="setSolverMode('Hard Mode Tree')">Hard Mode</button>
+              </div>
+              <div class="toolbar-actions">
+                <button class="small-btn" onclick="undoLastRow()" ${solverState.activeRow === 0 && !solverState.solved ? 'disabled' : ''}>Undo</button>
+                <button class="small-btn" onclick="resetSolver()">New Game</button>
+              </div>
+            </div>
+
+            ${gridHtml}
+
+            <div class="color-legend">
+              <span><i class="legend-dot" style="background:#787C7E"></i>Gray (Absent)</span>
+              <span><i class="legend-dot" style="background:#C9B458"></i>Yellow (Wrong spot)</span>
+              <span><i class="legend-dot" style="background:#6AAA64"></i>Green (Exact)</span>
+            </div>
+
+            <div class="primary-actions">
+              <button class="confirm-btn" onclick="confirmActiveRow()" ${solverState.solved ? 'disabled' : ''}>
+                Confirm Colors &amp; Next Guess ↵
+              </button>
+              <button class="small-btn" onclick="setActiveRowAllGray()" ${solverState.solved ? 'disabled' : ''}>All Gray</button>
+              <button class="small-btn" onclick="clearActiveRowWord()" ${solverState.solved ? 'disabled' : ''}>Clear</button>
+            </div>
+
+            ${oskHtml}
+          </div>
+
+          <div class="info-panel">
+            <div class="status-card">
+              <h3>${escapeHtml(solverState.statusTitle)}</h3>
+              <p class="status-msg ${solverState.statusType}">${solverState.statusHtml}</p>
+              ${clueBarHtml}
+              ${recHtml}
+            </div>
+
+            <div class="status-card">
+              <div class="candidates-header">
+                <h4>Possible Answers Left (${solverState.candidates.length})</h4>
+                <button class="small-btn" onclick="toggleExtendedDict()" title="Search post-2022 NYT additions and full 5-letter dictionary">
+                  ${dictToggleLabel}
+                </button>
+              </div>
+              <div class="word-chips">
+                ${chipsHtml || '<span style="color:#888;font-size:13px;">None</span>'}
+                ${extraCount > 0 ? `<span style="font-size:12px;color:#666;align-self:center;padding-left:4px;">+${extraCount} more…</span>` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (getCurrentTab() !== SOLVER_TAB_NAME) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        confirmActiveRow();
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        e.preventDefault();
+        handleBackspace();
+      } else if (/^[a-zA-Z]$/.test(e.key)) {
+        e.preventDefault();
+        handleTypeLetter(e.key.toUpperCase());
+      }
+    });
+
+    /* ================= EXCEL SHEET RENDERERS ================= */
+    function normalizeHex(rgb) {
+      if (!rgb || typeof rgb !== 'string') return null;
+      const clean = rgb.replace(/^#/, '');
+      if (clean.length === 8) return '#' + clean.slice(2).toUpperCase();
+      if (clean.length === 6) return '#' + clean.toUpperCase();
+      return null;
+    }
+
+    function getFillHex(cell) {
+      if (!cell || !cell.s) return null;
+      const fg = cell.s.fgColor || (cell.s.fill && cell.s.fill.fgColor);
+      return fg && fg.rgb ? normalizeHex(fg.rgb) : null;
+    }
+
+    function getFontStyle(cell) {
+      if (!cell || !cell.s || !cell.s.font) return {};
+      const f = cell.s.font;
+      return {
+        color: f.color && f.color.rgb ? normalizeHex(f.color.rgb) : null,
+        bold: Boolean(f.bold),
+        italic: Boolean(f.italic),
+        underline: Boolean(f.underline)
+      };
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function buildInlineStyle(fillHex, font) {
+      const styles = [];
+      if (fillHex) styles.push(`background-color:${fillHex}`);
+      if (font.color) styles.push(`color:${font.color}`);
+      if (font.bold) styles.push('font-weight:bold');
+      if (font.italic) styles.push('font-style:italic');
+      if (font.underline) styles.push('text-decoration:underline');
+      return styles.length ? ` style="${styles.join(';')}"` : '';
+    }
+
+    function slugify(name) {
+      return name.replace(/[^a-zA-Z0-9]+/g, '-');
+    }
+
+    function renderSheetHtml(sheetName) {
+      if (htmlCache[sheetName]) return htmlCache[sheetName];
+
+      const ws = workbook.Sheets[sheetName];
+      if (!ws) return `<div class="sheet-placeholder">Sheet "${escapeHtml(sheetName)}" not found in workbook.</div>`;
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      const isTree = sheetName === 'Standard Tree' || sheetName === 'Hard Mode Tree';
+      const isIndex = sheetName === 'Index';
+      const maxCol = isTree ? 6 : range.e.c;
+
+      const tableClass = isTree ? 'sheet-tree' : (isIndex ? 'sheet-index' : 'sheet-guide');
+      const parts = [`<table class="${tableClass}"><tbody>`];
+
+      for (let r = range.s.r; r <= range.e.r; r++) {
+        const rowNum = r + 1;
+        const rowId = `${slugify(sheetName)}-R${rowNum}`;
+
+        let rowHasContentOrFill = false;
+        for (let c = range.s.c; c <= maxCol; c++) {
+          const cell = ws[XLSX.utils.encode_cell({ r, c })];
+          if (cell && ((cell.v !== undefined && cell.v !== null && cell.v !== '') || getFillHex(cell))) {
+            rowHasContentOrFill = true;
+            break;
+          }
+        }
+        if (!rowHasContentOrFill) {
+          const span = maxCol - range.s.c + 1;
+          parts.push(`<tr id="${rowId}" class="spacer-row"><td colspan="${span}"></td></tr>`);
+          continue;
+        }
+
+        const firstCell = ws[XLSX.utils.encode_cell({ r, c: 0 })];
+        const firstFill = getFillHex(firstCell);
+        if (isTree && firstFill === '#1F3864') {
+          const text = firstCell ? escapeHtml(XLSX.utils.format_cell(firstCell)) : '';
+          const style = buildInlineStyle(firstFill, getFontStyle(firstCell));
+          parts.push(`<tr id="${rowId}"><td colspan="7" class="banner-cell"${style}>${text}</td></tr>`);
+          continue;
+        }
+
+        parts.push(`<tr id="${rowId}">`);
+        for (let c = range.s.c; c <= maxCol; c++) {
+          const addr = XLSX.utils.encode_cell({ r, c });
+          const cell = ws[addr];
+          const fillHex = getFillHex(cell);
+          const font = getFontStyle(cell);
+          const rawVal = cell && cell.v !== undefined && cell.v !== null ? XLSX.utils.format_cell(cell) : '';
+          const escapedVal = escapeHtml(rawVal);
+
+          const classes = [];
+          if (isTree) {
+            if (c <= 4) {
+              classes.push('word-col');
+              if (fillHex) classes.push('tile-cell');
+            } else if (c === 5) {
+              classes.push('gap-col');
+            } else if (c === 6) {
+              classes.push('desc-col');
+            }
+          } else if (isIndex) {
+            if (r > 0 && c >= 1 && c <= 5 && fillHex) {
+              classes.push('tile-cell');
+            }
+            if (r > 0 && (c === 0 || c === 6 || c === 7)) {
+              classes.push('num-cell');
+            }
+          }
+
+          let innerHtml = escapedVal;
+          if (cell && cell.l && cell.l.Target && cell.l.Target.startsWith('#')) {
+            const match = cell.l.Target.match(/^#'?([^'!]+)'?!([A-Z]+)(\d+)$/);
+            if (match) {
+              const targetSheet = match[1];
+              const targetRow = parseInt(match[3], 10);
+              innerHtml = `<a class="jump-link" href="#${slugify(targetSheet)}-R${targetRow}" onclick="jumpToBlock(event, '${targetSheet.replace(/'/g, "\\'")}', ${targetRow})">${escapedVal}</a>`;
+            }
+          }
+
+          const classAttr = classes.length ? ` class="${classes.join(' ')}"` : '';
+          const styleAttr = (isTree && c === 5) ? '' : buildInlineStyle(fillHex, font);
+          parts.push(`<td${classAttr}${styleAttr}>${innerHtml}</td>`);
+        }
+        parts.push('</tr>');
+      }
+
+      parts.push('</tbody></table>');
+      htmlCache[sheetName] = parts.join('');
+      return htmlCache[sheetName];
+    }
+
+    function getCurrentTab() {
+      const active = document.querySelector('.tab-btn.active');
+      return active ? active.dataset.sheet : '';
+    }
+
+    function switchTab(sheetName) {
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.sheet === sheetName);
+      });
+      const output = document.getElementById('output');
+      if (sheetName === SOLVER_TAB_NAME) {
+        renderSolverView();
+      } else if (workbook) {
+        output.innerHTML = renderSheetHtml(sheetName);
+      } else if (workbookError) {
+        output.innerHTML = `
+          <div class="sheet-placeholder">
+            <b>Could not automatically load <code>SALET_decision_tree.xlsx</code>.</b><br><br>
+            If you opened <code>index.html</code> directly from your computer (<code>file://</code>), select the file below:<br><br>
+            <input type="file" accept=".xlsx" onchange="handleManualFileUpload(event)">
+          </div>
+        `;
+      } else {
+        output.innerHTML = `<div class="sheet-placeholder">Loading <b>${escapeHtml(sheetName)}</b>…</div>`;
+      }
+      window.scrollTo({ top: 0 });
+    }
+
+    function jumpToBlock(event, targetSheet, targetRow) {
+      event.preventDefault();
+      switchTab(targetSheet);
+      requestAnimationFrame(() => {
+        const rowEl = document.getElementById(`${slugify(targetSheet)}-R${targetRow}`);
+        if (rowEl) {
+          rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          rowEl.classList.add('highlight-target');
+          setTimeout(() => rowEl.classList.remove('highlight-target'), 2000);
+        }
+      });
+    }
+  </script>
+</body>
+</html>
